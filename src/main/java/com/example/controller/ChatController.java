@@ -1,4 +1,4 @@
-package com.example;
+package com.example.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -56,7 +56,6 @@ public class ChatController {
 
         log.info("Sending {} messages in history", history.size());
 
-        log.info("API KEY ", apiKey);
         HttpRequest httpRequest = HttpRequest.newBuilder()
                 .uri(URI.create(apiUrl))
                 .header("Content-Type", "application/json")
