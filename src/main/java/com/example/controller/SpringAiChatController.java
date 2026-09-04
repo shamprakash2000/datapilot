@@ -11,11 +11,17 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import com.example.config.ChatHistoryDialect;
 import com.example.config.Prompts;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 import java.util.UUID;
 
+@Tag(name = "Spring AI Chat", description = "Persistent multi-turn chat using Spring AI ChatClient. Conversation history stored in PostgreSQL (Neon). Each conversation is isolated by a UUID session ID.")
 @RestController
 @RequestMapping("/api")
 public class SpringAiChatController {
@@ -50,6 +56,7 @@ public class SpringAiChatController {
      * Start a new conversation — returns a UUID the client must pass on every subsequent message.
      * POST /api/chat-ai/session
      */
+    @Operation(summary = "Start a new conversation", description = "Returns a conversationId UUID. Pass this in every subsequent /chat-ai request to maintain history.")
     @PostMapping("/chat-ai/session")
     public Map<String, String> startSession() {
         String conversationId = UUID.randomUUID().toString();
@@ -62,8 +69,10 @@ public class SpringAiChatController {
      * POST /api/chat-ai
      * Body: {"conversationId": "uuid", "message": "your question"}
      */
+    @Operation(summary = "Send a message", description = "Send a message in an existing conversation. History (last 20 messages) is loaded from PostgreSQL and sent to Gemini automatically.")
+    @RequestBody(required = true, content = @Content(examples = @ExampleObject(value = "{\"conversationId\": \"your-uuid-here\", \"message\": \"What did I just ask you?\"}")))
     @PostMapping("/chat-ai")
-    public ResponseEntity<Map<String, String>> chat(@RequestBody Map<String, String> request) {
+    public ResponseEntity<Map<String, String>> chat(@org.springframework.web.bind.annotation.RequestBody Map<String, String> request) {
         String conversationId = request.get("conversationId");
         String userMessage = request.get("message");
 
@@ -97,6 +106,7 @@ public class SpringAiChatController {
      * Clear history for a specific conversation.
      * DELETE /api/chat-ai/session/{conversationId}
      */
+    @Operation(summary = "Delete a conversation", description = "Permanently deletes all messages for this conversationId from PostgreSQL.")
     @DeleteMapping("/chat-ai/session/{conversationId}")
     public Map<String, String> deleteSession(@PathVariable String conversationId) {
         memoryRepository.deleteByConversationId(conversationId);

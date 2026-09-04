@@ -11,6 +11,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import com.example.config.Prompts;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +23,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Tag(name = "Spring AI RAG", description = "RAG pipeline using Spring AI VectorStore and ChatClient. Vectors stored in Pinecone namespace 'spring-ai'. Falls back to direct LLM when no context found.")
 @RestController
 @RequestMapping("/api/rag-ai")
 public class SpringAiRagController {
@@ -45,8 +51,10 @@ public class SpringAiRagController {
      */
     private static final int MAX_INGEST_CHARS = 50_000;
 
+    @Operation(summary = "Ingest a document", description = "Chunks the text, embeds each chunk via Gemini, and upserts all vectors to Pinecone. Max 50,000 characters.")
+    @RequestBody(required = true, content = @Content(examples = @ExampleObject(value = "{\"text\": \"Spring AI is a framework that simplifies AI integration in Spring Boot applications...\"}")))
     @PostMapping("/ingest")
-    public ResponseEntity<Map<String, Object>> ingest(@RequestBody Map<String, String> request) {
+    public ResponseEntity<Map<String, Object>> ingest(@org.springframework.web.bind.annotation.RequestBody Map<String, String> request) {
         String text = request.get("text");
         if (text == null || text.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "text is required"));
@@ -87,8 +95,10 @@ public class SpringAiRagController {
      *   2. Searches Pinecone for top-3 results above 0.70 similarity
      *   3. Returns matching Document objects with content + metadata
      */
+    @Operation(summary = "Ask a question (RAG + fallback)", description = "Embeds the question, searches Pinecone for relevant chunks (top 3, threshold 0.70). If context found, answers using RAG. If not, falls back to direct Gemini call. Response includes 'source': 'rag' or 'llm-fallback'.")
+    @RequestBody(required = true, content = @Content(examples = @ExampleObject(value = "{\"question\": \"What is Spring AI?\"}")))
     @PostMapping("/ask")
-    public ResponseEntity<Map<String, Object>> ask(@RequestBody Map<String, String> request) {
+    public ResponseEntity<Map<String, Object>> ask(@org.springframework.web.bind.annotation.RequestBody Map<String, String> request) {
         String question = request.get("question");
         if (question == null || question.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "question is required"));

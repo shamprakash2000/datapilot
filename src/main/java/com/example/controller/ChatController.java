@@ -7,6 +7,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -15,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+@Tag(name = "Plain HTTP Chat", description = "Single-turn and multi-turn chat using direct HTTP calls to Gemini. History stored in-memory (resets on restart).")
 @RestController
 @RequestMapping("/api")
 public class ChatController {
@@ -33,8 +40,10 @@ public class ChatController {
     // Conversation history — stored in memory while the app is running
     private final List<Map<String, String>> history = new ArrayList<>();
 
+    @Operation(summary = "Chat with Gemini", description = "Sends a message to Gemini. Conversation history is maintained in-memory — each call builds on previous messages in the same session.")
+    @RequestBody(required = true, content = @Content(examples = @ExampleObject(value = "{\"message\": \"What is Spring Boot?\"}")))
     @PostMapping("/chat")
-    public Map<String, String> chat(@RequestBody Map<String, String> request) throws Exception {
+    public Map<String, String> chat(@org.springframework.web.bind.annotation.RequestBody Map<String, String> request) throws Exception {
         String userMessage = request.get("message");
 
         // Add user message to history
@@ -93,6 +102,7 @@ public class ChatController {
     }
 
     // Clear history — start a fresh conversation
+    @Operation(summary = "Reset conversation", description = "Clears the in-memory conversation history. Next message starts a fresh conversation.")
     @PostMapping("/chat/reset")
     public Map<String, String> reset() {
         history.clear();

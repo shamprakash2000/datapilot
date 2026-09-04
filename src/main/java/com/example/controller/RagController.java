@@ -2,6 +2,11 @@ package com.example.controller;
 
 import com.example.config.Prompts;
 import com.example.model.ChunkData;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import com.example.service.ChunkingService;
 import com.example.service.EmbeddingService;
 import com.example.service.PineconeService;
@@ -22,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+@Tag(name = "Plain HTTP RAG", description = "RAG pipeline using direct HTTP calls to Gemini and Pinecone. Vectors stored in Pinecone default namespace.")
 @RestController
 @RequestMapping("/api/rag")
 public class RagController {
@@ -54,8 +60,10 @@ public class RagController {
      */
     private static final int MAX_INGEST_CHARS = 50_000;
 
+    @Operation(summary = "Ingest a document", description = "Chunks the text, batch-embeds all chunks in one Gemini call, batch-upserts to Pinecone. Deterministic IDs — re-ingesting the same document overwrites existing vectors. Max 50,000 characters.")
+    @RequestBody(required = true, content = @Content(examples = @ExampleObject(value = "{\"text\": \"Your document content here...\"}")))
     @PostMapping("/ingest")
-    public Map<String, String> ingest(@RequestBody Map<String, String> request) throws Exception {
+    public Map<String, String> ingest(@org.springframework.web.bind.annotation.RequestBody Map<String, String> request) throws Exception {
         String text = request.get("text");
         if (text == null || text.isBlank()) {
             throw new IllegalArgumentException("text is required");
@@ -104,8 +112,10 @@ public class RagController {
      * 3. Send relevant chunks + question to Gemini
      * 4. Gemini answers using only your ingested content
      */
+    @Operation(summary = "Ask a question", description = "Embeds the question, searches Pinecone (top 3, threshold 0.70), builds context, and asks Gemini to answer using only that context.")
+    @RequestBody(required = true, content = @Content(examples = @ExampleObject(value = "{\"question\": \"What is RAG?\"}")))
     @PostMapping("/ask")
-    public Map<String, String> ask(@RequestBody Map<String, String> request) throws Exception {
+    public Map<String, String> ask(@org.springframework.web.bind.annotation.RequestBody Map<String, String> request) throws Exception {
         String question = request.get("question");
 
         // Single embed — ask flow always has exactly one text (the question)
