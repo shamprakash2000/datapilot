@@ -11,6 +11,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -30,7 +31,7 @@ public class AgentController {
     private final ChatClient chatClient;
     private final ChatClient itineraryClient;
 
-    public AgentController(ChatClient.Builder builder, JdbcTemplate jdbcTemplate, AgentTools agentTools) {
+    public AgentController(ChatModel chatModel, JdbcTemplate jdbcTemplate, AgentTools agentTools) {
         JdbcChatMemoryRepository memoryRepository = JdbcChatMemoryRepository.builder()
                 .jdbcTemplate(jdbcTemplate)
                 .dialect(new ChatHistoryDialect())
@@ -41,15 +42,15 @@ public class AgentController {
                 .maxMessages(20)
                 .build();
 
-        // Conversational agent — has memory, freeform text responses
-        this.chatClient = builder
+        // Fresh builder for conversational agent — has memory, freeform text responses
+        this.chatClient = ChatClient.builder(chatModel)
                 .defaultSystem(Prompts.TRAVEL_AGENT_SYSTEM)
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(memory).build())
                 .defaultTools(agentTools)
                 .build();
 
-        // Itinerary generator — no memory (one-shot), returns structured JSON via .entity()
-        this.itineraryClient = builder
+        // Fresh builder for itinerary generator — no memory, structured JSON via .entity()
+        this.itineraryClient = ChatClient.builder(chatModel)
                 .defaultSystem(Prompts.ITINERARY_SYSTEM)
                 .defaultTools(agentTools)
                 .build();
