@@ -10,6 +10,7 @@ import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryReposito
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import com.example.config.ChatHistoryDialect;
+import com.example.config.Prompts;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -40,7 +41,7 @@ public class SpringAiChatController {
                 .build();
 
         this.chatClient = builder
-                .defaultSystem("You are a helpful assistant for a Java backend engineer learning AI development. Be concise and practical.")
+                .defaultSystem(Prompts.CHAT_AI_SYSTEM)
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(memory).build())
                 .build();
     }

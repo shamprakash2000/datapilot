@@ -1,5 +1,6 @@
 package com.example.controller;
 
+import com.example.config.Prompts;
 import com.example.model.ChunkData;
 import com.example.service.ChunkingService;
 import com.example.service.EmbeddingService;
@@ -51,9 +52,17 @@ public class RagController {
      * POST /api/rag/ingest
      * Body: {"text": "your full document text here..."}
      */
+    private static final int MAX_INGEST_CHARS = 50_000;
+
     @PostMapping("/ingest")
     public Map<String, String> ingest(@RequestBody Map<String, String> request) throws Exception {
         String text = request.get("text");
+        if (text == null || text.isBlank()) {
+            throw new IllegalArgumentException("text is required");
+        }
+        if (text.length() > MAX_INGEST_CHARS) {
+            throw new IllegalArgumentException("text exceeds maximum allowed size of " + MAX_INGEST_CHARS + " characters");
+        }
 
         // SHA-256 of the full document — links all chunks back to the same source document
         String documentId = sha256(text);
@@ -112,15 +121,7 @@ public class RagController {
         log.info("Relevant chunks : {}", relevantDocs);
 
         String context = String.join("\n\n", relevantDocs);
-        String prompt = """
-                Use the following context to answer the question.
-                Only use information from the context. If the answer is not in the context, say "I don't know".
-
-                Context:
-                %s
-
-                Question: %s
-                """.formatted(context, question);
+        String prompt = Prompts.PLAIN_RAG_PROMPT_TEMPLATE.formatted(context, question);
 
         String requestBody = """
                 {
