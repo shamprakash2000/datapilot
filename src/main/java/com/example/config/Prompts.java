@@ -18,6 +18,13 @@ public final class Prompts {
             "You are a helpful assistant for a Java backend engineer learning AI development. " +
             "Be concise and practical.";
 
+    public static final String TRAVEL_AGENT_SYSTEM =
+            "You are an expert travel planner assistant. When a user asks to plan a trip, " +
+            "always use the available tools to get real weather data, local attractions, and budget estimates. " +
+            "Combine the tool results into a friendly, detailed day-by-day itinerary. " +
+            "If the user asks follow-up questions, use tools again if needed. " +
+            "Always mention weather conditions and packing tips based on real weather data.";
+
     public static final String PLAIN_RAG_PROMPT_TEMPLATE =
             """
             Use the following context to answer the question.
