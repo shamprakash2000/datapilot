@@ -58,7 +58,7 @@ public class AgentTools {
             Map.entry("december",  "Winter peak — best time to visit most of India")
     );
 
-    @Tool(description = "Get current weather conditions for a city along with seasonal travel context for the specified month. Use this when the user mentions a destination and travel month.")
+    @Tool(description = "Get current weather conditions for an Indian city along with seasonal travel context for the specified month. Use this when the user mentions an Indian destination and travel month.")
     public String getWeather(String city, String month) {
         log.info("Tool called: getWeather({}, {})", city, month);
         try {
@@ -94,10 +94,9 @@ public class AgentTools {
         }
     }
 
-    @Tool(description = "Get top tourist attractions, must-try local food, and recommended activities for a city. Use this when planning what to do and see.")
+    @Tool(description = "Get top tourist attractions, must-try local food, and recommended activities for an Indian city. Use this when planning what to do and see.")
     public String getAttractions(String city) {
         log.info("Tool called: getAttractions({})", city);
-        // Returns structured attraction data — Gemini will weave this into the itinerary
         return switch (city.toLowerCase()) {
             case "goa" -> """
                     Top Attractions: Baga Beach, Calangute Beach, Anjuna Flea Market, Dudhsagar Waterfalls,
@@ -171,6 +170,187 @@ public class AgentTools {
         return "Current date and time: " +
                LocalDateTime.now().format(DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy, hh:mm a"));
     }
+
+    @Tool(description = "Get all available modes of transport between two Indian cities including flights, trains, buses, and road options with duration, cost, and frequency. Use this when the user asks how to travel between two places.")
+    public String getModeOfTransport(String fromCity, String toCity) {
+        log.info("Tool called: getModeOfTransport({}, {})", fromCity, toCity);
+        String route = fromCity.toLowerCase() + "-" + toCity.toLowerCase();
+        String reverseRoute = toCity.toLowerCase() + "-" + fromCity.toLowerCase();
+
+        String routeData = TRANSPORT_ROUTES.getOrDefault(route,
+                           TRANSPORT_ROUTES.getOrDefault(reverseRoute, null));
+
+        if (routeData != null) return routeData;
+
+        // Generic fallback for routes not in our data
+        return String.format(
+                "Transport options from %s to %s:\n" +
+                "  ✈ Flight — Check IndiGo, Air India, SpiceJet on MakeMyTrip/Ixigo for availability\n" +
+                "  🚂 Train — Search on IRCTC (irctc.co.in) for trains between these cities\n" +
+                "  🚌 Bus — KSRTC/state buses and private Volvo/sleeper options available; check RedBus\n" +
+                "  🚗 Drive — Use Google Maps for exact distance, route, and toll estimates\n" +
+                "  💡 Tip: For distances under 300km, train or bus is usually most economical. " +
+                "For over 500km, compare flight vs overnight train.",
+                fromCity, toCity);
+    }
+
+    @Tool(description = "Search for flight options between two Indian cities on a given date. Returns estimated prices, duration, and airlines. Use when the user asks about flights or air travel.")
+    public String searchFlights(String fromCity, String toCity, String date) {
+        log.info("Tool called: searchFlights({}, {}, {})", fromCity, toCity, date);
+        String route = fromCity.toLowerCase() + "-" + toCity.toLowerCase();
+        String reverseRoute = toCity.toLowerCase() + "-" + fromCity.toLowerCase();
+
+        String flightData = FLIGHT_ROUTES.getOrDefault(route,
+                            FLIGHT_ROUTES.getOrDefault(reverseRoute, null));
+
+        if (flightData != null) {
+            return "Flights from " + fromCity + " to " + toCity + " on " + date + ":\n" + flightData +
+                   "\n💡 Book on MakeMyTrip, Ixigo, or directly on airline websites for best prices. " +
+                   "Prices shown are estimates — actual fares vary by date and booking time.";
+        }
+
+        return String.format(
+                "Flights from %s to %s on %s:\n" +
+                "  No direct flight data available for this route.\n" +
+                "  💡 Check MakeMyTrip, Ixigo, or Cleartrip for real-time availability.\n" +
+                "  Consider connecting via Mumbai, Delhi, Bangalore, or Hyderabad hub airports.",
+                fromCity, toCity, date);
+    }
+
+    @Tool(description = "Find hotel options in an Indian city with price ranges for different budgets. Use when the user asks about accommodation or where to stay.")
+    public String findHotels(String city, String checkIn, int nights) {
+        log.info("Tool called: findHotels({}, checkIn={}, nights={})", city, checkIn, nights);
+        int[] costs = BUDGET_ESTIMATES.getOrDefault(city.toLowerCase(), new int[]{3000, 700, 600, 500});
+        int midRange = costs[0];
+        int budget = midRange / 2;
+        int luxury = midRange * 3;
+
+        String specificHotels = HOTEL_RECOMMENDATIONS.getOrDefault(city.toLowerCase(), "");
+
+        return String.format(
+                "Hotel options in %s (check-in: %s, %d night%s):\n\n" +
+                "  🏨 Budget (₹%,d–₹%,d/night)\n" +
+                "     Hostels, guesthouses, OYO properties\n" +
+                "     Total for %d nights: ₹%,d–₹%,d\n\n" +
+                "  🏩 Mid-range (₹%,d–₹%,d/night)\n" +
+                "     3-star hotels, boutique stays\n" +
+                "     Total for %d nights: ₹%,d–₹%,d\n\n" +
+                "  🏰 Luxury (₹%,d+/night)\n" +
+                "     5-star resorts, heritage hotels\n" +
+                "     Total for %d nights: ₹%,d+\n\n" +
+                "%s" +
+                "  💡 Book on MakeMyTrip, Booking.com, or Goibibo. " +
+                "Book 2-3 weeks in advance for peak season.",
+                city, checkIn, nights, nights > 1 ? "s" : "",
+                budget, midRange - 500,
+                nights, budget * nights, (midRange - 500) * nights,
+                midRange, midRange + 1500,
+                nights, midRange * nights, (midRange + 1500) * nights,
+                luxury,
+                nights, luxury * nights,
+                specificHotels
+        );
+    }
+
+    // Popular transport routes with detailed info
+    private static final Map<String, String> TRANSPORT_ROUTES = Map.ofEntries(
+            Map.entry("mangalore-bangalore", """
+                    Transport options from Mangalore to Bangalore:
+                      ✈ Flight — ~1hr | ₹2,500–5,000 | IndiGo, Air India | 3-4 flights/day from MNG airport
+                      🚂 Train — ~7-9hrs | ₹300–1,200 | Matsyagandha Exp, Rajya Rani Exp | overnight options
+                      🚌 Bus — ~7-8hrs | ₹400–900 | KSRTC Airavat, private Volvo/sleeper | very frequent
+                      🚗 Drive — ~6-7hrs | 360km via NH75 | toll ~₹400 | scenic Western Ghats route
+                      💡 Best option: Overnight bus (departs 9-10pm, arrives early morning) saves hotel cost."""),
+            Map.entry("mumbai-goa", """
+                    Transport options from Mumbai to Goa:
+                      ✈ Flight — ~1hr | ₹3,000–7,000 | IndiGo, GoAir, Air India | 8-10 flights/day
+                      🚂 Train — ~8-12hrs | ₹400–1,800 | Konkan Railway (scenic) | Mandovi/Tejas Express
+                      🚌 Bus — ~12-14hrs | ₹800–1,500 | private Volvo sleeper | overnight options
+                      🚗 Drive — ~10-11hrs | 590km via NH66 | scenic coastal route
+                      💡 Best option: Konkan Railway — scenic coastal route through Western Ghats."""),
+            Map.entry("delhi-agra", """
+                    Transport options from Delhi to Agra:
+                      🚂 Train — ~2hrs | ₹700–1,500 | Gatimaan Express (fastest, 160km/h) | Shatabdi
+                      🚌 Bus — ~4hrs | ₹200–500 | AC buses from ISBT Kashmere Gate | frequent
+                      🚗 Drive — ~3-4hrs | 230km via Yamuna Expressway | toll ~₹600
+                      ✈ No direct flights — distance too short
+                      💡 Best option: Gatimaan Express — fastest train in India on this route."""),
+            Map.entry("bangalore-mysore", """
+                    Transport options from Bangalore to Mysore:
+                      🚂 Train — ~2.5-3hrs | ₹100–500 | Shatabdi Express | 4-5 trains/day
+                      🚌 Bus — ~3hrs | ₹150–350 | KSRTC frequent service | every 30 mins
+                      🚗 Drive — ~3hrs | 150km via NH275 | 6-lane expressway | toll ~₹150
+                      ✈ No flights — too close
+                      💡 Best option: KSRTC bus — most frequent, affordable, drops at city centre."""),
+            Map.entry("chennai-pondicherry", """
+                    Transport options from Chennai to Pondicherry:
+                      🚌 Bus — ~3hrs | ₹100–250 | TNSTC/private | very frequent from CMBT
+                      🚗 Drive — ~2.5-3hrs | 160km via ECR (scenic coastal road) | no major tolls
+                      🚂 Train — ~4hrs | ₹80–300 | limited direct trains | Villupuram change
+                      ✈ No flights
+                      💡 Best option: Drive via ECR — beautiful coastal highway, best road trip route."""),
+            Map.entry("delhi-jaipur", """
+                    Transport options from Delhi to Jaipur:
+                      🚂 Train — ~4-5hrs | ₹300–1,200 | Shatabdi, Duronto | 8-10 trains/day
+                      🚌 Bus — ~5-6hrs | ₹300–700 | RSRTC Volvo | very frequent from ISBT
+                      🚗 Drive — ~5hrs | 280km via NH48 | 6-lane expressway | toll ~₹500
+                      ✈ Flight — ~1hr | ₹3,500–6,000 | limited flights
+                      💡 Best option: Train — comfortable, city-centre to city-centre."""),
+            Map.entry("bangalore-goa", """
+                    Transport options from Bangalore to Goa:
+                      ✈ Flight — ~1hr | ₹3,000–6,000 | IndiGo, SpiceJet | 4-5 flights/day
+                      🚌 Bus — ~9-10hrs | ₹700–1,400 | private Volvo sleeper | overnight popular
+                      🚗 Drive — ~8-9hrs | 560km via NH748 | scenic Western Ghats
+                      🚂 Train — ~10-12hrs | ₹400–1,500 | limited options via Vasco/Margao
+                      💡 Best option: Overnight bus — saves hotel night, arrives early morning.""")
+    );
+
+    // Flight route data
+    private static final Map<String, String> FLIGHT_ROUTES = Map.ofEntries(
+            Map.entry("mangalore-bangalore",
+                    "  ✈ IndiGo 6E-xxx — Departs 06:00, Arrives 07:05 | ₹2,800–4,500\n" +
+                    "  ✈ Air India AI-xxx — Departs 14:30, Arrives 15:35 | ₹3,200–5,500\n" +
+                    "  ✈ IndiGo 6E-xxx — Departs 19:00, Arrives 20:05 | ₹2,500–4,000\n" +
+                    "  Duration: ~1hr | Airport: Mangaluru International (MNG) → Kempegowda (BLR)"),
+            Map.entry("mumbai-goa",
+                    "  ✈ IndiGo 6E-xxx — Departs 06:15, Arrives 07:20 | ₹3,500–6,000\n" +
+                    "  ✈ GoAir G8-xxx — Departs 10:30, Arrives 11:35 | ₹3,000–5,500\n" +
+                    "  ✈ Air India AI-xxx — Departs 18:00, Arrives 19:10 | ₹4,000–7,000\n" +
+                    "  Duration: ~1hr 10min | Airport: CSIA (BOM) → Dabolim/Manohar (GOI)"),
+            Map.entry("delhi-goa",
+                    "  ✈ IndiGo 6E-xxx — Departs 05:30, Arrives 08:00 | ₹4,500–8,000\n" +
+                    "  ✈ SpiceJet SG-xxx — Departs 11:00, Arrives 13:30 | ₹4,000–7,500\n" +
+                    "  ✈ Air India AI-xxx — Departs 18:30, Arrives 21:00 | ₹5,000–9,000\n" +
+                    "  Duration: ~2hr 30min | Airport: IGI (DEL) → Dabolim/Manohar (GOI)"),
+            Map.entry("bangalore-goa",
+                    "  ✈ IndiGo 6E-xxx — Departs 07:00, Arrives 08:05 | ₹3,000–5,500\n" +
+                    "  ✈ SpiceJet SG-xxx — Departs 14:00, Arrives 15:10 | ₹2,800–5,000\n" +
+                    "  Duration: ~1hr 10min | Airport: Kempegowda (BLR) → Dabolim/Manohar (GOI)")
+    );
+
+    // Specific hotel recommendations for popular destinations
+    private static final Map<String, String> HOTEL_RECOMMENDATIONS = Map.of(
+            "goa",
+                    "  🌟 Popular picks:\n" +
+                    "     Budget: Zostel Goa (Anjuna), Jungle by Stuhrling\n" +
+                    "     Mid-range: The Byke Pebble Bay, Resort Terra Paraiso\n" +
+                    "     Luxury: Taj Exotica Resort, W Goa, The Leela Goa\n\n",
+            "manali",
+                    "  🌟 Popular picks:\n" +
+                    "     Budget: Zostel Manali, Snow Valley Resorts\n" +
+                    "     Mid-range: Hotel Rohtang Heights, Apple Country Resort\n" +
+                    "     Luxury: Span Resort & Spa, Solang Valley Resort\n\n",
+            "kerala",
+                    "  🌟 Popular picks:\n" +
+                    "     Budget: Zostel Kochi, Mango Shade Alleppey\n" +
+                    "     Mid-range: Fragrant Nature Backwater Resort, Coconut Lagoon\n" +
+                    "     Luxury: Kumarakom Lake Resort, Taj Malabar Kochi\n\n",
+            "mumbai",
+                    "  🌟 Popular picks:\n" +
+                    "     Budget: Zostel Mumbai, Hotel Residency Fort\n" +
+                    "     Mid-range: ITC Maratha, Trident Nariman Point\n" +
+                    "     Luxury: The Taj Mahal Palace, Four Seasons Mumbai\n\n"
+    );
 
     private String seasonContext(String month) {
         return MONTH_SEASON.getOrDefault(month.toLowerCase(),

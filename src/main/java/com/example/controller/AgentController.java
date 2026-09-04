@@ -1,6 +1,7 @@
 package com.example.controller;
 
 import com.example.config.Prompts;
+import com.example.model.ItineraryResponse;
 import com.example.service.AgentTools;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,11 +28,9 @@ public class AgentController {
     private static final Logger log = LoggerFactory.getLogger(AgentController.class);
 
     private final ChatClient chatClient;
-    private final AgentTools agentTools;
+    private final ChatClient itineraryClient;
 
     public AgentController(ChatClient.Builder builder, JdbcTemplate jdbcTemplate, AgentTools agentTools) {
-        this.agentTools = agentTools;
-
         JdbcChatMemoryRepository memoryRepository = JdbcChatMemoryRepository.builder()
                 .jdbcTemplate(jdbcTemplate)
                 .dialect(new ChatHistoryDialect())
@@ -42,10 +41,16 @@ public class AgentController {
                 .maxMessages(20)
                 .build();
 
-        // Register tools at build time — Gemini will decide when to call them
+        // Conversational agent — has memory, freeform text responses
         this.chatClient = builder
                 .defaultSystem(Prompts.TRAVEL_AGENT_SYSTEM)
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(memory).build())
+                .defaultTools(agentTools)
+                .build();
+
+        // Itinerary generator — no memory (one-shot), returns structured JSON via .entity()
+        this.itineraryClient = builder
+                .defaultSystem(Prompts.ITINERARY_SYSTEM)
                 .defaultTools(agentTools)
                 .build();
     }
@@ -94,6 +99,54 @@ public class AgentController {
                 "message", message,
                 "response", response
         ));
+    }
+
+    @Operation(
+        summary = "Generate a structured itinerary",
+        description = "Returns a fully structured JSON itinerary with day-by-day plans, budget breakdown, accommodation options, transport, packing list and travel tips. " +
+                      "The agent autonomously calls all relevant tools before generating the response. " +
+                      "Example body: {\"destination\": \"Goa\", \"days\": \"3\", \"month\": \"October\", \"fromCity\": \"Bangalore\"}"
+    )
+    @PostMapping("/itinerary")
+    public ResponseEntity<?> generateItinerary(@RequestBody Map<String, String> request) {
+        String destination = request.get("destination");
+        String days = request.get("days");
+        String month = request.get("month");
+        String fromCity = request.get("fromCity");
+
+        if (destination == null || destination.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "destination is required"));
+        }
+        if (days == null || month == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "days and month are required"));
+        }
+
+        String prompt = String.format(
+                "Plan a %s-day trip to %s in %s.%s " +
+                "Call getWeather, getAttractions, estimateBudget, findHotels, and getModeOfTransport tools " +
+                "to gather all information before building the itinerary.",
+                days, destination, month,
+                fromCity != null && !fromCity.isBlank() ? " Travelling from " + fromCity + "." : ""
+        );
+
+        log.info("Generating structured itinerary — destination: {}, days: {}, month: {}, from: {}",
+                destination, days, month, fromCity);
+
+        try {
+            ItineraryResponse itinerary = itineraryClient.prompt()
+                    .user(prompt)
+                    .call()
+                    .entity(ItineraryResponse.class);
+
+            log.info("Structured itinerary generated for {}", destination);
+            return ResponseEntity.ok(itinerary);
+        } catch (Exception e) {
+            log.error("Failed to generate structured itinerary for {}: {}", destination, e.getMessage());
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "error", "Failed to generate itinerary. Please try again.",
+                    "detail", e.getMessage()
+            ));
+        }
     }
 
     @Operation(
