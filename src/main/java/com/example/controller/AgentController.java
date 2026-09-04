@@ -30,6 +30,7 @@ public class AgentController {
 
     private final ChatClient chatClient;
     private final ChatClient itineraryClient;
+    private final ChatClient validationClient;
 
     public AgentController(ChatModel chatModel, JdbcTemplate jdbcTemplate, AgentTools agentTools) {
         JdbcChatMemoryRepository memoryRepository = JdbcChatMemoryRepository.builder()
@@ -54,6 +55,9 @@ public class AgentController {
                 .defaultSystem(Prompts.ITINERARY_SYSTEM)
                 .defaultTools(agentTools)
                 .build();
+
+        // Lightweight client for geography validation — no tools, no memory, just YES/NO answers
+        this.validationClient = ChatClient.builder(chatModel).build();
     }
 
     @Operation(
@@ -123,12 +127,25 @@ public class AgentController {
         }
 
         String prompt = String.format(
-                "Plan a %s-day trip to %s in %s.%s " +
-                "Call getWeather, getAttractions, estimateBudget, findHotels, and getModeOfTransport tools " +
-                "to gather all information before building the itinerary.",
+                Prompts.ITINERARY_USER_TEMPLATE,
                 days, destination, month,
                 fromCity != null && !fromCity.isBlank() ? " Travelling from " + fromCity + "." : ""
         );
+
+        log.info("Validating destination: {}", destination);
+        String validationAnswer = validationClient.prompt()
+                .system(Prompts.INDIA_VALIDATION_SYSTEM)
+                .user(String.format(Prompts.INDIA_VALIDATION_USER, destination))
+                .call()
+                .content();
+
+        if (validationAnswer == null || !validationAnswer.trim().toUpperCase().startsWith("YES")) {
+            log.info("Destination '{}' rejected — not in India (validator answered: {})", destination, validationAnswer);
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "We currently support travel planning only within India. International destinations are coming soon!",
+                    "destination", destination
+            ));
+        }
 
         log.info("Generating structured itinerary — destination: {}, days: {}, month: {}, from: {}",
                 destination, days, month, fromCity);

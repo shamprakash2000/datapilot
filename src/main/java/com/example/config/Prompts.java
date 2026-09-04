@@ -46,6 +46,17 @@ public final class Prompts {
             "Travel tips must be practical and actionable. " +
             "Only handle Indian destinations — decline politely for international destinations.";
 
+    public static final String INDIA_VALIDATION_SYSTEM =
+            "You are a geography validator. Answer only YES or NO, nothing else.";
+
+    public static final String INDIA_VALIDATION_USER =
+            "Is '%s' a city, region, or destination located within India?";
+
+    public static final String ITINERARY_USER_TEMPLATE =
+            "Plan a %s-day trip to %s in %s.%s " +
+            "Call getWeather, getAttractions, estimateBudget, findHotels, and getModeOfTransport tools " +
+            "to gather all information before building the itinerary.";
+
     public static final String PLAIN_RAG_PROMPT_TEMPLATE =
             """
             Use the following context to answer the question.
