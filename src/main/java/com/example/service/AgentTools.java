@@ -12,6 +12,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
@@ -27,7 +28,9 @@ public class AgentTools {
     @Value("${openweather.api.url}")
     private String weatherApiUrl;
 
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // Rough per-day cost estimates in INR for popular Indian destinations
@@ -65,11 +68,12 @@ public class AgentTools {
             String url = weatherApiUrl + "?q=" + city + "&appid=" + weatherApiKey + "&units=metric";
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(8))
                     .GET()
                     .build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            log.info("Response from weather api : {}", response.body());
+            log.info("Weather API responded with status {} for city: {}", response.statusCode(), city);
             JsonNode root = objectMapper.readTree(response.body());
 
             if (root.has("cod") && root.get("cod").asInt() != 200) {
@@ -133,6 +137,9 @@ public class AgentTools {
     @Tool(description = "Estimate total trip budget in Indian Rupees for a given city and number of days. Includes hotel, food, local transport and activities. Use this when the user asks about cost or budget.")
     public String estimateBudget(String city, int days) {
         log.info("Tool called: estimateBudget({}, {} days)", city, days);
+        if (days <= 0) {
+            return "Invalid number of days (" + days + "). Please provide a positive number of days.";
+        }
         int[] costs = BUDGET_ESTIMATES.getOrDefault(city.toLowerCase(), new int[]{3000, 700, 600, 500});
 
         int hotelPerDay = costs[0];
@@ -220,6 +227,9 @@ public class AgentTools {
     @Tool(description = "Find hotel options in an Indian city with price ranges for different budgets. Use when the user asks about accommodation or where to stay.")
     public String findHotels(String city, String checkIn, int nights) {
         log.info("Tool called: findHotels({}, checkIn={}, nights={})", city, checkIn, nights);
+        if (nights <= 0) {
+            return "Invalid number of nights (" + nights + "). Please provide a positive number of nights.";
+        }
         int[] costs = BUDGET_ESTIMATES.getOrDefault(city.toLowerCase(), new int[]{3000, 700, 600, 500});
         int midRange = costs[0];
         int budget = midRange / 2;

@@ -91,19 +91,26 @@ public class AgentController {
 
         log.info("Travel agent request — session: {}, message: {}", conversationId, message);
 
-        String response = chatClient.prompt()
-                .user(message)
-                .advisors(a -> a.param("chat_memory_conversation_id", conversationId))
-                .call()
-                .content();
+        try {
+            String response = chatClient.prompt()
+                    .user(message)
+                    .advisors(a -> a.param("chat_memory_conversation_id", conversationId))
+                    .call()
+                    .content();
 
-        log.info("Travel agent response generated for session: {}", conversationId);
-
-        return ResponseEntity.ok(Map.of(
-                "conversationId", conversationId,
-                "message", message,
-                "response", response
-        ));
+            log.info("Travel agent response generated for session: {}", conversationId);
+            return ResponseEntity.ok(Map.of(
+                    "conversationId", conversationId,
+                    "message", message,
+                    "response", response
+            ));
+        } catch (Exception e) {
+            log.error("Travel agent failed — session: {}, error: {}", conversationId, e.getMessage());
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "error", "The travel agent encountered an error. Please try again.",
+                    "conversationId", conversationId
+            ));
+        }
     }
 
     @Operation(
