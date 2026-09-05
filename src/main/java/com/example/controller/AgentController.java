@@ -13,9 +13,12 @@ import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -38,6 +41,7 @@ public class AgentController {
     private int timeoutSeconds;
 
     private final ChatClient chatClient;
+    private final ChatClient streamChatClient;
     private final ChatClient itineraryClient;
     private final ChatClient validationClient;
 
@@ -52,20 +56,29 @@ public class AgentController {
                 .maxMessages(20)
                 .build();
 
-        // Fresh builder for conversational agent — has memory, freeform text responses
+        // Conversational agent — has memory and tools; used by /chat (blocking)
         this.chatClient = ChatClient.builder(chatModel)
                 .defaultSystem(Prompts.TRAVEL_AGENT_SYSTEM)
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(memory).build())
                 .defaultTools(agentTools)
                 .build();
 
-        // Fresh builder for itinerary generator — no memory, structured JSON via .entity()
+        // Streaming conversational client — memory but NO tools.
+        // Spring AI 1.1.8 does not relay thought_signature between streaming rounds,
+        // causing Gemini to reject round 2 with 400 whenever a tool call occurs.
+        // Without tools the model answers in a single round so streaming works cleanly.
+        this.streamChatClient = ChatClient.builder(chatModel)
+                .defaultSystem(Prompts.TRAVEL_AGENT_SYSTEM)
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(memory).build())
+                .build();
+
+        // Itinerary generator — no memory, structured JSON via .entity()
         this.itineraryClient = ChatClient.builder(chatModel)
                 .defaultSystem(Prompts.ITINERARY_SYSTEM)
                 .defaultTools(agentTools)
                 .build();
 
-        // Lightweight client for geography validation — no tools, no memory, just YES/NO answers
+        // Geography validator — no tools, no memory, YES/NO only
         this.validationClient = ChatClient.builder(chatModel).build();
     }
 
@@ -199,6 +212,55 @@ public class AgentController {
                     "destination", destination
             ));
         }
+    }
+
+    @Operation(
+        summary = "Conversational streaming (no tool calls)",
+        description = "Streams the response token-by-token as Server-Sent Events. Best for follow-up questions and conversational turns. " +
+                      "Does NOT call weather/attractions/budget tools — use /chat for full tool-calling trip planning. " +
+                      "Each event has a 'data' field containing one token chunk; stream ends with data:[DONE]. " +
+                      "Note: Swagger UI collects all events at once — use curl or EventSource to see real streaming. " +
+                      "Example curl: curl -X POST http://localhost:8080/api/agent/chat/stream -H 'Content-Type: application/json' -d '{\"conversationId\":\"abc\",\"message\":\"What should I pack for Goa in July?\"}'"
+    )
+    @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> streamChat(@RequestBody Map<String, String> request) {
+        String conversationId = request.get("conversationId");
+        String message = request.get("message");
+
+        if (conversationId == null || conversationId.isBlank()) {
+            return Flux.just(ServerSentEvent.<String>builder()
+                    .event("error")
+                    .data("conversationId is required. Call POST /api/agent/session first.")
+                    .build());
+        }
+        if (message == null || message.isBlank()) {
+            return Flux.just(ServerSentEvent.<String>builder()
+                    .event("error")
+                    .data("message is required")
+                    .build());
+        }
+
+        log.info("Streaming agent request — session: {}, message: {}", conversationId, message);
+
+        return streamChatClient.prompt()
+                .user(message)
+                .advisors(a -> a.param("chat_memory_conversation_id", conversationId))
+                .stream()
+                .content()
+                .map(token -> ServerSentEvent.<String>builder()
+                        .data(token)
+                        .build())
+                .concatWith(Flux.just(ServerSentEvent.<String>builder()
+                        .data("[DONE]")
+                        .build()))
+                .doOnComplete(() -> log.info("Stream completed — session: {}", conversationId))
+                .onErrorResume(e -> {
+                    log.error("Stream error — session: {}, error: {}", conversationId, e.getMessage());
+                    return Flux.just(ServerSentEvent.<String>builder()
+                            .event("error")
+                            .data("Agent encountered an error. Please try again.")
+                            .build());
+                });
     }
 
     @Operation(
