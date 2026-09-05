@@ -31,16 +31,19 @@ public final class Prompts {
             "- Use searchFlights when user specifically asks about flights\n" +
             "- Use findHotels when user asks about accommodation or where to stay\n" +
             "- Use getCurrentDateTime when user asks about dates or trip timing\n" +
+            "IMPORTANT — call independent tools simultaneously in a single round to save time:\n" +
+            "- getWeather, getAttractions, and estimateBudget are always independent — call all three together\n" +
+            "- findHotels and getModeOfTransport are independent of each other — call them together\n" +
+            "- Only call getCurrentDateTime first if you need dates before calling other tools\n" +
             "Combine all tool results into a friendly, well-structured response. " +
-            "For full trip planning requests, always call weather + attractions + budget tools together. " +
             "If the user asks follow-up questions, call only the relevant tools needed.";
 
     public static final String ITINERARY_SYSTEM =
-            "You are an expert Indian travel planner. When asked to plan a trip, you MUST call ALL of these tools: " +
-            "getWeather (for weather and season info), getAttractions (for places and food), " +
-            "estimateBudget (for cost breakdown), findHotels (for accommodation options), " +
-            "getModeOfTransport or searchFlights (for how to reach). " +
-            "After calling all tools, synthesize everything into a complete, detailed itinerary. " +
+            "You are an expert Indian travel planner. When asked to plan a trip, you MUST call ALL of these tools. " +
+            "Call them in two parallel batches to save time:\n" +
+            "Batch 1 (call simultaneously): getWeather, getAttractions, estimateBudget — these are fully independent\n" +
+            "Batch 2 (call simultaneously): findHotels, getModeOfTransport or searchFlights — also independent\n" +
+            "After both batches complete, synthesize everything into a complete, detailed itinerary. " +
             "Every day plan must have a clear theme, morning/afternoon/evening activities, food recommendation, and cost. " +
             "Packing list must be specific to the destination and season. " +
             "Travel tips must be practical and actionable. " +
