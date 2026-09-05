@@ -12,9 +12,15 @@ import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import com.example.config.ChatHistoryDialect;
 
@@ -27,6 +33,9 @@ import java.util.UUID;
 public class AgentController {
 
     private static final Logger log = LoggerFactory.getLogger(AgentController.class);
+
+    @Value("${agent.timeout-seconds:30}")
+    private int timeoutSeconds;
 
     private final ChatClient chatClient;
     private final ChatClient itineraryClient;
@@ -92,11 +101,13 @@ public class AgentController {
         log.info("Travel agent request — session: {}, message: {}", conversationId, message);
 
         try {
-            String response = chatClient.prompt()
-                    .user(message)
-                    .advisors(a -> a.param("chat_memory_conversation_id", conversationId))
-                    .call()
-                    .content();
+            String response = CompletableFuture.supplyAsync(() ->
+                    chatClient.prompt()
+                            .user(message)
+                            .advisors(a -> a.param("chat_memory_conversation_id", conversationId))
+                            .call()
+                            .content()
+            ).orTimeout(timeoutSeconds, TimeUnit.SECONDS).join();
 
             log.info("Travel agent response generated for session: {}", conversationId);
             return ResponseEntity.ok(Map.of(
@@ -104,8 +115,15 @@ public class AgentController {
                     "message", message,
                     "response", response
             ));
-        } catch (Exception e) {
-            log.error("Travel agent failed — session: {}, error: {}", conversationId, e.getMessage());
+        } catch (CompletionException e) {
+            if (e.getCause() instanceof TimeoutException) {
+                log.warn("Agent timed out after {}s — session: {}", timeoutSeconds, conversationId);
+                return ResponseEntity.status(408).body(Map.of(
+                        "error", "The agent took too long to respond. Please try a simpler question.",
+                        "conversationId", conversationId
+                ));
+            }
+            log.error("Travel agent failed — session: {}, error: {}", conversationId, e.getCause().getMessage());
             return ResponseEntity.internalServerError().body(Map.of(
                     "error", "The travel agent encountered an error. Please try again.",
                     "conversationId", conversationId
@@ -158,18 +176,27 @@ public class AgentController {
                 destination, days, month, fromCity);
 
         try {
-            ItineraryResponse itinerary = itineraryClient.prompt()
-                    .user(prompt)
-                    .call()
-                    .entity(ItineraryResponse.class);
+            ItineraryResponse itinerary = CompletableFuture.supplyAsync(() ->
+                    itineraryClient.prompt()
+                            .user(prompt)
+                            .call()
+                            .entity(ItineraryResponse.class)
+            ).orTimeout(timeoutSeconds * 2L, TimeUnit.SECONDS).join();
 
             log.info("Structured itinerary generated for {}", destination);
             return ResponseEntity.ok(itinerary);
-        } catch (Exception e) {
-            log.error("Failed to generate structured itinerary for {}: {}", destination, e.getMessage());
+        } catch (CompletionException e) {
+            if (e.getCause() instanceof TimeoutException) {
+                log.warn("Itinerary timed out after {}s — destination: {}", timeoutSeconds * 2, destination);
+                return ResponseEntity.status(408).body(Map.of(
+                        "error", "Itinerary generation took too long. Try fewer days or a simpler destination.",
+                        "destination", destination
+                ));
+            }
+            log.error("Failed to generate itinerary for {}: {}", destination, e.getCause().getMessage());
             return ResponseEntity.internalServerError().body(Map.of(
                     "error", "Failed to generate itinerary. Please try again.",
-                    "detail", e.getMessage()
+                    "destination", destination
             ));
         }
     }
