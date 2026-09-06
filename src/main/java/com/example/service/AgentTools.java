@@ -16,11 +16,31 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import java.util.function.Consumer;
 
 @Component
 public class AgentTools {
 
     private static final Logger log = LoggerFactory.getLogger(AgentTools.class);
+
+    // Per-request status callback — set by the streaming endpoint before calling the agent.
+    // Tool methods emit progress messages through this so the caller can stream them as SSE events.
+    // ThreadLocal is safe here because Spring AI executes tool calls synchronously on the same
+    // thread that drives the blocking agent call (the boundedElastic thread in Flux.create).
+    private static final ThreadLocal<Consumer<String>> STATUS_EMITTER = new ThreadLocal<>();
+
+    public static void setStatusEmitter(Consumer<String> emitter) {
+        STATUS_EMITTER.set(emitter);
+    }
+
+    public static void clearStatusEmitter() {
+        STATUS_EMITTER.remove();
+    }
+
+    private static void emitStatus(String message) {
+        Consumer<String> emitter = STATUS_EMITTER.get();
+        if (emitter != null) emitter.accept(message);
+    }
 
     @Value("${openweather.api.key}")
     private String weatherApiKey;
@@ -63,6 +83,7 @@ public class AgentTools {
 
     @Tool(description = "Get current weather conditions for an Indian city along with seasonal travel context for the specified month. Use this when the user mentions an Indian destination and travel month.")
     public String getWeather(String city, String month) {
+        emitStatus("Checking weather in " + city + " for " + month + "...");
         log.info("Tool called: getWeather({}, {})", city, month);
         try {
             String url = weatherApiUrl + "?q=" + city + "&appid=" + weatherApiKey + "&units=metric";
@@ -100,6 +121,7 @@ public class AgentTools {
 
     @Tool(description = "Get top tourist attractions, must-try local food, and recommended activities for an Indian city. Use this when planning what to do and see.")
     public String getAttractions(String city) {
+        emitStatus("Finding top attractions in " + city + "...");
         log.info("Tool called: getAttractions({})", city);
         return switch (city.toLowerCase()) {
             case "goa" -> """
@@ -136,6 +158,7 @@ public class AgentTools {
 
     @Tool(description = "Estimate total trip budget in Indian Rupees for a given city and number of days. Includes hotel, food, local transport and activities. Use this when the user asks about cost or budget.")
     public String estimateBudget(String city, int days) {
+        emitStatus("Estimating budget for " + days + " days in " + city + "...");
         log.info("Tool called: estimateBudget({}, {} days)", city, days);
         if (days <= 0) {
             return "Invalid number of days (" + days + "). Please provide a positive number of days.";
@@ -173,6 +196,7 @@ public class AgentTools {
 
     @Tool(description = "Get the current date and time. Use this when the user asks about today's date or when calculating trip dates.")
     public String getCurrentDateTime() {
+        emitStatus("Getting current date and time...");
         log.info("Tool called: getCurrentDateTime()");
         return "Current date and time: " +
                LocalDateTime.now().format(DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy, hh:mm a"));
@@ -180,6 +204,7 @@ public class AgentTools {
 
     @Tool(description = "Get all available modes of transport between two Indian cities including flights, trains, buses, and road options with duration, cost, and frequency. Use this when the user asks how to travel between two places.")
     public String getModeOfTransport(String fromCity, String toCity) {
+        emitStatus("Looking up transport options from " + fromCity + " to " + toCity + "...");
         log.info("Tool called: getModeOfTransport({}, {})", fromCity, toCity);
         String route = fromCity.toLowerCase() + "-" + toCity.toLowerCase();
         String reverseRoute = toCity.toLowerCase() + "-" + fromCity.toLowerCase();
@@ -203,6 +228,7 @@ public class AgentTools {
 
     @Tool(description = "Search for flight options between two Indian cities on a given date. Returns estimated prices, duration, and airlines. Use when the user asks about flights or air travel.")
     public String searchFlights(String fromCity, String toCity, String date) {
+        emitStatus("Searching flights from " + fromCity + " to " + toCity + "...");
         log.info("Tool called: searchFlights({}, {}, {})", fromCity, toCity, date);
         String route = fromCity.toLowerCase() + "-" + toCity.toLowerCase();
         String reverseRoute = toCity.toLowerCase() + "-" + fromCity.toLowerCase();
@@ -226,6 +252,7 @@ public class AgentTools {
 
     @Tool(description = "Find hotel options in an Indian city with price ranges for different budgets. Use when the user asks about accommodation or where to stay.")
     public String findHotels(String city, String checkIn, int nights) {
+        emitStatus("Finding hotels in " + city + "...");
         log.info("Tool called: findHotels({}, checkIn={}, nights={})", city, checkIn, nights);
         if (nights <= 0) {
             return "Invalid number of nights (" + nights + "). Please provide a positive number of nights.";

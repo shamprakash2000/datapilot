@@ -19,6 +19,7 @@ import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -41,7 +42,6 @@ public class AgentController {
     private int timeoutSeconds;
 
     private final ChatClient chatClient;
-    private final ChatClient streamChatClient;
     private final ChatClient itineraryClient;
     private final ChatClient validationClient;
 
@@ -61,15 +61,6 @@ public class AgentController {
                 .defaultSystem(Prompts.TRAVEL_AGENT_SYSTEM)
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(memory).build())
                 .defaultTools(agentTools)
-                .build();
-
-        // Streaming conversational client — memory but NO tools.
-        // Spring AI 1.1.8 does not relay thought_signature between streaming rounds,
-        // causing Gemini to reject round 2 with 400 whenever a tool call occurs.
-        // Without tools the model answers in a single round so streaming works cleanly.
-        this.streamChatClient = ChatClient.builder(chatModel)
-                .defaultSystem(Prompts.TRAVEL_AGENT_SYSTEM)
-                .defaultAdvisors(MessageChatMemoryAdvisor.builder(memory).build())
                 .build();
 
         // Itinerary generator — no memory, structured JSON via .entity()
@@ -215,12 +206,13 @@ public class AgentController {
     }
 
     @Operation(
-        summary = "Conversational streaming (no tool calls)",
-        description = "Streams the response token-by-token as Server-Sent Events. Best for follow-up questions and conversational turns. " +
-                      "Does NOT call weather/attractions/budget tools — use /chat for full tool-calling trip planning. " +
-                      "Each event has a 'data' field containing one token chunk; stream ends with data:[DONE]. " +
-                      "Note: Swagger UI collects all events at once — use curl or EventSource to see real streaming. " +
-                      "Example curl: curl -X POST http://localhost:8080/api/agent/chat/stream -H 'Content-Type: application/json' -d '{\"conversationId\":\"abc\",\"message\":\"What should I pack for Goa in July?\"}'"
+        summary = "Chat with the travel agent (streaming with tool status)",
+        description = "Runs the full tool-calling agent and streams live progress as Server-Sent Events. " +
+                      "Two SSE event types: 'status' (fired as each tool executes — e.g. 'Checking weather in Goa...') " +
+                      "and 'token' (the complete agent response after all tools finish). Stream ends with data:[DONE]. " +
+                      "Note: Swagger UI collects all events at once — use curl or a browser EventSource to see live status events. " +
+                      "Example curl: curl -X POST http://localhost:8080/api/agent/chat/stream -H 'Content-Type: application/json' " +
+                      "-d '{\"conversationId\":\"abc\",\"message\":\"Plan a 3-day trip to Goa in October\"}'"
     )
     @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> streamChat(@RequestBody Map<String, String> request) {
@@ -242,25 +234,36 @@ public class AgentController {
 
         log.info("Streaming agent request — session: {}, message: {}", conversationId, message);
 
-        return streamChatClient.prompt()
-                .user(message)
-                .advisors(a -> a.param("chat_memory_conversation_id", conversationId))
-                .stream()
-                .content()
-                .map(token -> ServerSentEvent.<String>builder()
-                        .data(token)
-                        .build())
-                .concatWith(Flux.just(ServerSentEvent.<String>builder()
-                        .data("[DONE]")
-                        .build()))
-                .doOnComplete(() -> log.info("Stream completed — session: {}", conversationId))
-                .onErrorResume(e -> {
-                    log.error("Stream error — session: {}, error: {}", conversationId, e.getMessage());
-                    return Flux.just(ServerSentEvent.<String>builder()
-                            .event("error")
-                            .data("Agent encountered an error. Please try again.")
-                            .build());
-                });
+        // Pattern 1 hybrid streaming:
+        //   Phase 1 — tool calls run BLOCKING on a boundedElastic thread; each tool emits a
+        //             'status' SSE event in real-time via the ThreadLocal in AgentTools.
+        //   Phase 2 — the complete agent response is emitted as a 'token' SSE event once done.
+        //
+        // This avoids the Spring AI 1.1.8 bug where thought_signature is stripped between
+        // streaming rounds, while still giving the user live feedback during tool execution.
+        return Flux.<ServerSentEvent<String>>create(sink -> {
+            AgentTools.setStatusEmitter(msg -> sink.next(
+                    ServerSentEvent.<String>builder().event("status").data(msg).build()
+            ));
+            try {
+                String response = chatClient.prompt()
+                        .user(message)
+                        .advisors(a -> a.param("chat_memory_conversation_id", conversationId))
+                        .call()
+                        .content();
+
+                sink.next(ServerSentEvent.<String>builder().event("token").data(response).build());
+                sink.next(ServerSentEvent.<String>builder().data("[DONE]").build());
+                log.info("Stream completed — session: {}", conversationId);
+            } catch (Exception e) {
+                log.error("Stream error — session: {}, error: {}", conversationId, e.getMessage());
+                sink.next(ServerSentEvent.<String>builder()
+                        .event("error").data("Agent encountered an error. Please try again.").build());
+            } finally {
+                AgentTools.clearStatusEmitter();
+                sink.complete();
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     @Operation(
