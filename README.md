@@ -84,6 +84,55 @@ Swagger UI at `http://localhost:8080/swagger-ui.html`
 - `"source": "rag"` — answer grounded in your ingested documents
 - `"source": "llm-fallback"` — no relevant context found, Gemini answered from general knowledge
 
+### Travel Agent — `/api/agent`
+
+A fully agentic travel planner for Indian destinations. The LLM autonomously decides which tools to call, calls them (in parallel where possible), and synthesises results into a response.
+
+**Tools available to the agent:**
+
+| Tool | Description |
+|---|---|
+| `getWeather` | Live weather + seasonal context via OpenWeatherMap |
+| `getAttractions` | Top sights, food, and activities for the city |
+| `estimateBudget` | Per-day cost breakdown (hotel, food, transport, activities) |
+| `findHotels` | Hotel options across budget / mid-range / luxury |
+| `getModeOfTransport` | Train, bus, flight, and road options between cities |
+| `searchFlights` | Estimated flight options and prices |
+| `getCurrentDateTime` | Current date/time for trip date calculations |
+
+**Endpoints:**
+
+| Method | URL | Body | Description |
+|---|---|---|---|
+| POST | `/api/agent/session` | — | Start a new session, returns `conversationId` |
+| POST | `/api/agent/chat` | `{"conversationId": "uuid", "message": "Plan a trip to Goa"}` | Conversational agent with memory and tools. Timeout: 45s |
+| POST | `/api/agent/chat/stream` | `{"conversationId": "uuid", "message": "..."}` | Same agent, streaming SSE — live tool status events + final response |
+| POST | `/api/agent/itinerary` | `{"destination": "Goa", "days": "3", "month": "October", "fromCity": "Bangalore"}` | Structured JSON itinerary (day plans, budget, hotels, transport). India only. Timeout: 90s |
+| DELETE | `/api/agent/session/{conversationId}` | — | Clear conversation history |
+
+**Streaming SSE event types (`/api/agent/chat/stream`):**
+
+```
+event: status   →  fired in real-time as each tool executes
+data: Checking weather in Goa for October...
+
+event: status
+data: Finding top attractions in Goa...
+
+event: token    →  complete agent response, after all tools finish
+data: Here is your 3-day Goa itinerary...
+
+data: [DONE]    →  stream ended
+```
+
+Test with curl to see live events:
+```bash
+curl -X POST http://localhost:8080/api/agent/chat/stream \
+  -H "Content-Type: application/json" \
+  -d '{"conversationId":"YOUR_SESSION_ID","message":"Plan a 3-day trip to Goa in October"}' \
+  --no-buffer
+```
+
 ### Health
 
 | Method | URL | Description |
@@ -103,6 +152,14 @@ Swagger UI at `http://localhost:8080/swagger-ui.html`
 **768-dim embeddings** — `gemini-embedding-001` produces 3072-dim vectors by default. We truncate to 768 using MRL (Matryoshka Representation Learning) — the first N dimensions are semantically complete on their own, so quality is preserved while Pinecone storage cost is reduced.
 
 **SCRAM-SHA-256 channel binding** — corporate networks run SSL-intercepting proxies that break PostgreSQL's SCRAM-SHA-256-PLUS authentication (which binds auth to the TLS channel). Fix: `channelBinding=disable` via HikariCP data-source-properties forces the standard SCRAM-SHA-256 instead.
+
+**Three separate ChatClients for the agent** — a single `ChatClient.Builder` accumulates `defaultTools()` calls across builds. Using `ChatModel` directly to build each client independently prevents duplicate tool registration. Each client has a distinct role: `chatClient` (memory + tools), `itineraryClient` (no memory, structured JSON output), `validationClient` (no tools, YES/NO only).
+
+**India-only validation with a pre-check LLM call** — `.entity(Class)` forces a JSON schema response, overriding any "decline" instruction in the system prompt. The itinerary endpoint uses a separate lightweight `validationClient` call first that returns YES/NO before invoking the main itinerary agent.
+
+**Hybrid streaming (Pattern 1)** — Spring AI 1.1.8 strips `thought_signature` from tool calls in multi-round streaming, causing Gemini to reject round 2 with 400. The streaming endpoint runs the agent blocking on a `boundedElastic` thread, streams live `status` SSE events via a `ThreadLocal<Consumer<String>>` in `AgentTools`, then emits the final response as a `token` event — matching how ChatGPT/Claude show "Searching..." indicators.
+
+**HikariCP tuning for Neon serverless** — Neon closes idle connections after 5 minutes. Without tuning, HikariCP holds dead references and wastes 5–20s reconnecting. Fix: `max-lifetime=240000`, `keepalive-time=60000`, `minimum-idle=1`.
 
 ---
 
@@ -126,10 +183,16 @@ Swagger UI at `http://localhost:8080/swagger-ui.html`
 - Health check via Spring Boot Actuator
 - Input size guard (50k character limit on ingest)
 
-### Phase 3 — Agents & Tool Use 🔜
-- ReAct loop (Reason + Act)
-- Function calling / tool use with Gemini
-- Agent decides which tool to call and when
+### Phase 3 — Agents & Tool Use ✅
+- ReAct loop — LLM reasons → calls tools → reasons again → final answer
+- 7 tools: weather (live API), attractions, budget, hotels, transport, flights, datetime
+- Parallel tool calling — system prompt instructs Gemini to call independent tools simultaneously
+- Error handling — tools return error strings instead of throwing, agent recovers gracefully
+- Timeout — `CompletableFuture.orTimeout` with 45s (chat) and 90s (itinerary), returns 408
+- Structured output — `/api/agent/itinerary` returns typed JSON via Spring AI `.entity()`
+- India-only validation — pre-check LLM call prevents structured output from bypassing restrictions
+- Hybrid streaming SSE — live tool status events via `ThreadLocal`, final response as `token` event
+- HikariCP pool tuning for Neon serverless connection lifecycle
 
 ### Phase 4 — MCP
 - MCP server and client

@@ -31,7 +31,11 @@ import com.example.config.ChatHistoryDialect;
 import java.util.Map;
 import java.util.UUID;
 
-@Tag(name = "Travel Agent", description = "Agentic travel planner — the LLM autonomously calls weather, attractions, and budget tools to build a personalised itinerary.")
+@Tag(name = "Travel Agent", description = "Agentic travel planner for Indian destinations. " +
+        "The LLM runs a ReAct loop — it reasons, calls tools (weather, attractions, budget, hotels, transport, flights, datetime), " +
+        "processes results, and repeats until it can give a complete answer. " +
+        "Supports conversational memory, structured JSON itineraries, and hybrid SSE streaming with live tool status events. " +
+        "All endpoints require a conversationId from POST /api/agent/session.")
 @RestController
 @RequestMapping("/api/agent")
 public class AgentController {
@@ -86,7 +90,10 @@ public class AgentController {
 
     @Operation(
         summary = "Chat with the travel agent",
-        description = "Send a message to the travel agent. The agent autonomously calls weather, attractions, and budget tools as needed. Example: 'Plan a 3-day trip to Goa in October'"
+        description = "Conversational agent with persistent memory (last 20 messages) and full tool access. " +
+                      "The agent autonomously decides which tools to call — getWeather, getAttractions, estimateBudget, findHotels, getModeOfTransport, searchFlights, getCurrentDateTime. " +
+                      "Independent tools are called in parallel. Hard timeout: 45s (returns 408 if exceeded). " +
+                      "Example: {\"conversationId\": \"uuid\", \"message\": \"Plan a 3-day trip to Goa in October from Bangalore\"}"
     )
     @PostMapping("/chat")
     public ResponseEntity<Map<String, Object>> chat(@RequestBody Map<String, String> request) {
@@ -136,9 +143,14 @@ public class AgentController {
     }
 
     @Operation(
-        summary = "Generate a structured itinerary",
-        description = "Returns a fully structured JSON itinerary with day-by-day plans, budget breakdown, accommodation options, transport, packing list and travel tips. " +
-                      "The agent autonomously calls all relevant tools before generating the response. " +
+        summary = "Generate a structured itinerary (India only)",
+        description = "Returns a fully typed JSON itinerary with day-by-day plans (morning/afternoon/evening), budget breakdown, " +
+                      "accommodation options, transport, packing list, and travel tips. " +
+                      "A pre-validation LLM call rejects non-Indian destinations before the agent runs. " +
+                      "The agent calls tools in two parallel batches: " +
+                      "Batch 1 — getWeather + getAttractions + estimateBudget; " +
+                      "Batch 2 — findHotels + getModeOfTransport/searchFlights. " +
+                      "Hard timeout: 90s (returns 408 if exceeded). " +
                       "Example body: {\"destination\": \"Goa\", \"days\": \"3\", \"month\": \"October\", \"fromCity\": \"Bangalore\"}"
     )
     @PostMapping("/itinerary")
