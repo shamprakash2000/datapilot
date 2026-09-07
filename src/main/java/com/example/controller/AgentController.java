@@ -29,13 +29,12 @@ import java.util.concurrent.TimeoutException;
 import com.example.config.ChatHistoryDialect;
 
 import java.util.Map;
-import java.util.UUID;
 
 @Tag(name = "Travel Agent", description = "Agentic travel planner for Indian destinations. " +
         "The LLM runs a ReAct loop — it reasons, calls tools (weather, attractions, budget, hotels, transport, flights, datetime), " +
         "processes results, and repeats until it can give a complete answer. " +
         "Supports conversational memory, structured JSON itineraries, and hybrid SSE streaming with live tool status events. " +
-        "All endpoints require a conversationId from POST /api/agent/session.")
+        "All endpoints require a conversationId from POST /api/session.")
 @RestController
 @RequestMapping("/api/agent")
 public class AgentController {
@@ -75,17 +74,6 @@ public class AgentController {
 
         // Geography validator — no tools, no memory, YES/NO only
         this.validationClient = ChatClient.builder(chatModel).build();
-    }
-
-    @Operation(
-        summary = "Start a new travel session",
-        description = "Returns a conversationId to use in all subsequent /chat calls."
-    )
-    @PostMapping("/session")
-    public Map<String, String> startSession() {
-        String conversationId = UUID.randomUUID().toString();
-        log.info("New travel agent session: {}", conversationId);
-        return Map.of("conversationId", conversationId);
     }
 
     @Operation(

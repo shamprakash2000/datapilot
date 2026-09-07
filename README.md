@@ -58,11 +58,16 @@ Swagger UI at `http://localhost:8080/swagger-ui.html`
 |---|---|---|---|
 | POST | `/api/chat` | `{"message": "your question"}` | Single-turn chat with Gemini |
 
+### Shared Session — `/api/session`
+
+| Method | URL | Description |
+|---|---|---|
+| POST | `/api/session` | Create a new session, returns `conversationId` — works with any agent |
+
 ### Spring AI Chat with Memory — `/api/chat-ai`
 
 | Method | URL | Body | Description |
 |---|---|---|---|
-| POST | `/api/chat-ai/session` | — | Start a new conversation, returns `conversationId` |
 | POST | `/api/chat-ai` | `{"conversationId": "uuid", "message": "hi"}` | Chat with persistent memory (last 20 messages) |
 | DELETE | `/api/chat-ai/session/{conversationId}` | — | Clear conversation history |
 
@@ -104,7 +109,6 @@ A fully agentic travel planner for Indian destinations. The LLM autonomously dec
 
 | Method | URL | Body | Description |
 |---|---|---|---|
-| POST | `/api/agent/session` | — | Start a new session, returns `conversationId` |
 | POST | `/api/agent/chat` | `{"conversationId": "uuid", "message": "Plan a trip to Goa"}` | Conversational agent with memory and tools. Timeout: 45s |
 | POST | `/api/agent/chat/stream` | `{"conversationId": "uuid", "message": "..."}` | Same agent, streaming SSE — live tool status events + final response |
 | POST | `/api/agent/itinerary` | `{"destination": "Goa", "days": "3", "month": "October", "fromCity": "Bangalore"}` | Structured JSON itinerary (day plans, budget, hotels, transport). India only. Timeout: 90s |
@@ -132,6 +136,38 @@ curl -X POST http://localhost:8080/api/agent/chat/stream \
   -d '{"conversationId":"YOUR_SESSION_ID","message":"Plan a 3-day trip to Goa in October"}' \
   --no-buffer
 ```
+
+### Database Agent — `/api/db-agent`
+
+A natural language database query agent. Ask questions in plain English — the LLM runs a ReAct loop: lists tables, inspects schemas, generates safe SELECT queries, and returns formatted results.
+
+**Tables the agent can query:**
+
+| Table | Columns |
+|---|---|
+| `da_products` | id, name, category, price, stock, added_on |
+| `da_orders` | id, product_id, customer_name, city, quantity, total_amount, order_date, status |
+
+The tables are pre-loaded with 20 products (8 categories, Indian pricing) and 80 orders (15 Indian cities, 4 statuses, dates spanning June–September 2026).
+
+**Endpoints:**
+
+| Method | URL | Body | Description |
+|---|---|---|---|
+| POST | `/api/db-agent/chat` | `{"conversationId": "uuid", "message": "Show top 5 products by revenue"}` | Natural language query, blocking. Timeout: 30s |
+| POST | `/api/db-agent/chat/stream` | `{"conversationId": "uuid", "message": "..."}` | Same agent, SSE streaming — live tool status + final response |
+
+**Example questions:**
+- "Which city has the most orders?"
+- "Show me the top 3 products by total revenue"
+- "How many orders are in SHIPPED status?"
+- "What is the average order value for delivered orders?"
+- "List all orders from Bangalore placed this month"
+
+**Safety enforced by `DatabaseTools`:**
+- Only `SELECT` statements allowed — `INSERT`, `UPDATE`, `DELETE`, `DROP` all rejected
+- Only `da_products` and `da_orders` accessible — `chat_history` and system tables blocked
+- Results capped at 20 rows automatically if no `LIMIT` in the query
 
 ### Health
 
@@ -194,7 +230,14 @@ curl -X POST http://localhost:8080/api/agent/chat/stream \
 - Hybrid streaming SSE — live tool status events via `ThreadLocal`, final response as `token` event
 - HikariCP pool tuning for Neon serverless connection lifecycle
 
-### Phase 4 — MCP
+### Phase 4 — Database Agent ✅
+- LLM generates real SQL from natural language via `@Tool` methods
+- Schema introspection — agent discovers column names at runtime via `getTableSchema`
+- Safety enforcement — SELECT-only, table whitelist, LIMIT 20 injection, DML/DDL keyword blocking
+- Same ReAct loop + ThreadLocal streaming pattern as Phase 3 (Travel Agent)
+- 100-row seed dataset (20 products + 80 orders) auto-loaded via `spring.sql.init.data-locations`
+
+### Phase 5 — MCP
 - MCP server and client
 - Connect tools via protocol
 
