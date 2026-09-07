@@ -21,11 +21,9 @@ public class McpConfig {
     @Value("${spring.ai.mcp.client.sse.connections.db-server.url:}")
     private String mcpServerUrl;
 
-    // Resilient replacement for Spring AI's McpClientAutoConfiguration +
-    // McpToolCallbackAutoConfiguration. If the MCP server is down at startup,
-    // we return an empty provider instead of crashing the whole context.
-    @Bean
-    public SyncMcpToolCallbackProvider syncMcpToolCallbackProvider() {
+    // Called at startup (bean init) and again on /api/mcp-agent/reconnect.
+    // Returns a provider with live tools on success, empty provider on failure.
+    public SyncMcpToolCallbackProvider connect() {
         if (mcpServerUrl.isBlank()) {
             log.warn("MCP server URL not configured — MCP agent endpoints are disabled");
             return new SyncMcpToolCallbackProvider(List.of());
@@ -41,9 +39,14 @@ public class McpConfig {
             log.info("MCP client connected to {}", mcpServerUrl);
             return new SyncMcpToolCallbackProvider(List.of(client));
         } catch (Exception e) {
-            log.warn("MCP server at {} is not running — MCP agent endpoints will return 503 until it starts: {}",
+            log.warn("MCP server at {} is not running — MCP agent endpoints will return 503: {}",
                     mcpServerUrl, e.getMessage());
             return new SyncMcpToolCallbackProvider(List.of());
         }
+    }
+
+    @Bean
+    public SyncMcpToolCallbackProvider syncMcpToolCallbackProvider() {
+        return connect();
     }
 }
