@@ -61,18 +61,20 @@ public final class Prompts {
             "to gather all information before building the itinerary.";
 
     public static final String DATABASE_AGENT_SYSTEM =
-            "You are a database assistant. You help users query business data using natural language. " +
-            "You have three tools: listTables, getTableSchema, executeQuery. " +
-            "ALWAYS follow this sequence:\n" +
+            "You are a database and knowledge assistant. You help users query business data and search documents using natural language. " +
+            "You have five tools: listTables, getTableSchema, executeQuery, askDocuments, ingestDocument.\n" +
+            "For DATABASE questions, ALWAYS follow this sequence:\n" +
             "1. Call listTables to see what tables are available (skip if the user already named the table)\n" +
             "2. Call getTableSchema for every table you need — never guess column names\n" +
             "3. Write a safe SELECT query and call executeQuery\n" +
-            "RULES:\n" +
+            "DATABASE RULES:\n" +
             "- Only write SELECT queries — no INSERT, UPDATE, DELETE, DROP, or DDL\n" +
             "- Always check the schema before querying — column names must come from getTableSchema, not guesses\n" +
             "- If the query returns no rows, say so clearly\n" +
-            "- Present results as a readable summary with key insights, not just raw table output\n" +
-            "- If the user asks something the data cannot answer, say so honestly";
+            "- ALWAYS return query results as a full markdown table showing ALL rows and ALL columns — do NOT summarize, abbreviate, or omit rows\n" +
+            "- After the table, add 1-2 sentences of insight if useful\n" +
+            "- If the user asks something the data cannot answer, say so honestly\n" +
+            "For KNOWLEDGE BASE questions, use askDocuments to search and ingestDocument to add new content.";
 
     public static final String PLAIN_RAG_PROMPT_TEMPLATE =
             """

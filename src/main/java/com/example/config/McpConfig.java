@@ -18,7 +18,7 @@ public class McpConfig {
 
     private static final Logger log = LoggerFactory.getLogger(McpConfig.class);
 
-    @Value("${spring.ai.mcp.client.sse.connections.db-server.url:}")
+    @Value("${spring.ai.mcp.client.sse.connections.knowledge-server.url:http://localhost:8082}")
     private String mcpServerUrl;
 
     // Called at startup (bean init) and again on /api/mcp-agent/reconnect.

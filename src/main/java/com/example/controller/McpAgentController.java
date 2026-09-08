@@ -59,8 +59,6 @@ public class McpAgentController {
             log.warn("McpAgentController: no MCP tools available — start gemini-mcp-server on port 8081");
         }
 
-        // Tools come from the MCP server (discovered via tools/list at startup),
-        // not from local @Tool methods. Same system prompt and memory as the DB agent.
         this.chatClient = ChatClient.builder(chatModel)
                 .defaultSystem(Prompts.DATABASE_AGENT_SYSTEM)
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(memory).build())
@@ -96,9 +94,10 @@ public class McpAgentController {
         log.info("MCP agent request — session: {}, message: {}", conversationId, message);
 
         try {
+            String augmented = message + "\n\n[Format rule: If you call executeQuery, copy the COMPLETE table from the tool result verbatim into your response. Do not summarize, paraphrase, or omit any rows or columns.]";
             String response = CompletableFuture.supplyAsync(() ->
                     chatClient.prompt()
-                            .user(message)
+                            .user(augmented)
                             .advisors(a -> a.param("chat_memory_conversation_id", conversationId))
                             .call()
                             .content()
@@ -162,8 +161,11 @@ public class McpAgentController {
             sink.next(ServerSentEvent.<String>builder()
                     .event("status").data("Querying database via MCP server...").build());
             try {
+                // Append table instruction to the user message so Gemini treats it as a user requirement,
+                // not just a system guideline — Gemini is more obedient to user turns than system prompts.
+                String augmented = message + "\n\n[Format rule: If you call executeQuery, copy the COMPLETE table from the tool result verbatim into your response. Do not summarize, paraphrase, or omit any rows or columns.]";
                 String response = chatClient.prompt()
-                        .user(message)
+                        .user(augmented)
                         .advisors(a -> a.param("chat_memory_conversation_id", conversationId))
                         .call()
                         .content();
