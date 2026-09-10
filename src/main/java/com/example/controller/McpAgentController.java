@@ -1,7 +1,10 @@
 package com.example.controller;
 
 import com.example.config.ChatHistoryDialect;
+import com.example.config.InputGuardrailService;
+import com.example.config.InputGuardrailService.GuardrailException;
 import com.example.config.Prompts;
+import com.example.config.TokenTrackingAdvisor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
@@ -11,6 +14,7 @@ import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -40,10 +44,17 @@ public class McpAgentController {
     private int timeoutSeconds;
 
     private final ChatClient chatClient;
+    private final TokenTrackingAdvisor tokenTracker;
+    private final InputGuardrailService guardrail;
     private final boolean mcpAvailable;
 
     public McpAgentController(ChatModel chatModel, JdbcTemplate jdbcTemplate,
-                               SyncMcpToolCallbackProvider mcpTools) {
+                               SyncMcpToolCallbackProvider mcpTools,
+                               TokenTrackingAdvisor tokenTracker,
+                               InputGuardrailService guardrail) {
+        this.tokenTracker = tokenTracker;
+        this.guardrail = guardrail;
+
         JdbcChatMemoryRepository memoryRepository = JdbcChatMemoryRepository.builder()
                 .jdbcTemplate(jdbcTemplate)
                 .dialect(new ChatHistoryDialect())
@@ -56,7 +67,7 @@ public class McpAgentController {
 
         this.mcpAvailable = mcpTools.getToolCallbacks().length > 0;
         if (!mcpAvailable) {
-            log.warn("McpAgentController: no MCP tools available — start gemini-mcp-server on port 8081");
+            log.warn("McpAgentController: no MCP tools available — start gemini-mcp-server on port 8082");
         }
 
         this.chatClient = ChatClient.builder(chatModel)
@@ -68,8 +79,7 @@ public class McpAgentController {
 
     @Operation(
         summary = "Ask the MCP-backed database agent",
-        description = "Same as /api/db-agent/chat but tools execute in gemini-mcp-server (port 8081) via MCP protocol. " +
-                      "Check gemini-mcp-server logs to see tool execution happening there, not here. " +
+        description = "Same as /api/db-agent/chat but tools execute in gemini-knowledge-mcp-server (port 8082) via MCP protocol. " +
                       "Example: {\"conversationId\": \"uuid\", \"message\": \"Which city has the most orders?\"}"
     )
     @PostMapping("/chat")
@@ -79,7 +89,7 @@ public class McpAgentController {
 
         if (!mcpAvailable) {
             return ResponseEntity.status(503).body(Map.of(
-                    "error", "MCP server is not running. Start gemini-mcp-server on port 8081 and restart gemini-chat."
+                    "error", "MCP server is not running. Start gemini-knowledge-mcp-server on port 8082 and restart gemini-chat."
             ));
         }
         if (conversationId == null || conversationId.isBlank()) {
@@ -91,18 +101,31 @@ public class McpAgentController {
             return ResponseEntity.badRequest().body(Map.of("error", "message is required"));
         }
 
+        try {
+            guardrail.validate(message, conversationId);
+        } catch (GuardrailException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+
         log.info("MCP agent request — session: {}, message: {}", conversationId, message);
 
         try {
             String augmented = message + "\n\n[Format rule: If you call executeQuery, copy the COMPLETE table from the tool result verbatim into your response. Do not summarize, paraphrase, or omit any rows or columns.]";
-            String response = CompletableFuture.supplyAsync(() ->
+            long start = System.currentTimeMillis();
+
+            // Use chatResponse() instead of content() so we can read token usage metadata
+            final String finalConversationId = conversationId;
+            ChatResponse chatResponse = CompletableFuture.supplyAsync(() ->
                     chatClient.prompt()
                             .user(augmented)
-                            .advisors(a -> a.param("chat_memory_conversation_id", conversationId))
+                            .advisors(a -> a.param("chat_memory_conversation_id", finalConversationId))
                             .call()
-                            .content()
+                            .chatResponse()
             ).orTimeout(timeoutSeconds, TimeUnit.SECONDS).join();
 
+            tokenTracker.record(conversationId, chatResponse, System.currentTimeMillis() - start);
+
+            String response = chatResponse.getResult().getOutput().getText();
             log.info("MCP agent response — session: {}", conversationId);
             return ResponseEntity.ok(Map.of(
                     "conversationId", conversationId,
@@ -119,7 +142,7 @@ public class McpAgentController {
             }
             log.error("MCP agent failed — session: {}, error: {}", conversationId, e.getCause().getMessage());
             return ResponseEntity.internalServerError().body(Map.of(
-                    "error", "The MCP agent encountered an error. Is gemini-mcp-server running on port 8081?",
+                    "error", "The MCP agent encountered an error. Is gemini-knowledge-mcp-server running on port 8082?",
                     "conversationId", conversationId
             ));
         }
@@ -128,8 +151,7 @@ public class McpAgentController {
     @Operation(
         summary = "Ask the MCP-backed database agent (streaming)",
         description = "SSE streaming version of /api/mcp-agent/chat. " +
-                      "Note: per-tool status events are not available here — tools run in a separate JVM (gemini-mcp-server) " +
-                      "so ThreadLocal cannot bridge the two processes. Stream emits 'token' (final answer) and [DONE]."
+                      "Stream emits 'status', 'token' (final answer), and [DONE]."
     )
     @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> streamChat(@RequestBody Map<String, String> request) {
@@ -139,7 +161,7 @@ public class McpAgentController {
         if (!mcpAvailable) {
             return Flux.just(ServerSentEvent.<String>builder()
                     .event("error")
-                    .data("MCP server is not running. Start gemini-mcp-server on port 8081 and restart gemini-chat.")
+                    .data("MCP server is not running. Start gemini-knowledge-mcp-server on port 8082 and restart gemini-chat.")
                     .build());
         }
         if (conversationId == null || conversationId.isBlank()) {
@@ -153,30 +175,38 @@ public class McpAgentController {
                     .event("error").data("message is required").build());
         }
 
+        try {
+            guardrail.validate(message, conversationId);
+        } catch (GuardrailException e) {
+            return Flux.just(ServerSentEvent.<String>builder()
+                    .event("error").data(e.getMessage()).build());
+        }
+
         log.info("MCP agent stream request — session: {}, message: {}", conversationId, message);
 
         return Flux.<ServerSentEvent<String>>create(sink -> {
-            // No ThreadLocal status emitter here — tools run in gemini-mcp-server (different JVM).
-            // We emit a single status to let the client know the agent is working.
             sink.next(ServerSentEvent.<String>builder()
                     .event("status").data("Querying database via MCP server...").build());
             try {
-                // Append table instruction to the user message so Gemini treats it as a user requirement,
-                // not just a system guideline — Gemini is more obedient to user turns than system prompts.
                 String augmented = message + "\n\n[Format rule: If you call executeQuery, copy the COMPLETE table from the tool result verbatim into your response. Do not summarize, paraphrase, or omit any rows or columns.]";
-                String response = chatClient.prompt()
+                long start = System.currentTimeMillis();
+
+                ChatResponse chatResponse = chatClient.prompt()
                         .user(augmented)
                         .advisors(a -> a.param("chat_memory_conversation_id", conversationId))
                         .call()
-                        .content();
+                        .chatResponse();
 
+                tokenTracker.record(conversationId, chatResponse, System.currentTimeMillis() - start);
+
+                String response = chatResponse.getResult().getOutput().getText();
                 sink.next(ServerSentEvent.<String>builder().event("token").data(response).build());
                 sink.next(ServerSentEvent.<String>builder().data("[DONE]").build());
                 log.info("MCP agent stream completed — session: {}", conversationId);
             } catch (Exception e) {
                 log.error("MCP agent stream error — session: {}, error: {}", conversationId, e.getMessage());
                 sink.next(ServerSentEvent.<String>builder()
-                        .event("error").data("Agent encountered an error. Is gemini-mcp-server running on port 8081?").build());
+                        .event("error").data("Agent encountered an error. Is gemini-knowledge-mcp-server running on port 8082?").build());
             } finally {
                 sink.complete();
             }

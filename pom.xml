@@ -94,6 +94,23 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-mcp-client</artifactId>
         </dependency>
+
+        <!--
+          Observability — OpenTelemetry bridge.
+          Enables distributed tracing via Micrometer + OTel.
+          Spring AI records one span per LLM call (model, tokens, latency) automatically.
+          Export target is configured via management.otlp.tracing.endpoint — leave blank to
+          keep traces local (just metrics + logs); set to Langfuse OTLP URL to get a trace UI.
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+        </dependency>
+        <!--
+          opentelemetry-exporter-otlp is intentionally omitted here.
+          Add it (and set LANGFUSE_OTLP_ENDPOINT env var) only when you have a Langfuse account.
+          Without it Spring Boot will not try to create an OTLP HTTP exporter bean.
+        -->
     </dependencies>
 
     <build>
