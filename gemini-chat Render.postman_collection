@@ -1,0 +1,415 @@
+{
+  "info": {
+    "_postman_id": "8b0d22fc-1319-4d1f-8653-ec8e360a8abd",
+    "name": "gemini-chat Render",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "56306820"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "method": "GET",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://gemini-chat-a7lr.onrender.com/actuator/health",
+          "protocol": "https",
+          "host": [
+            "gemini-chat-a7lr",
+            "onrender",
+            "com"
+          ],
+          "path": [
+            "actuator",
+            "health"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Chat",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"message\": \"Hi how are you?\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://gemini-chat-a7lr.onrender.com/api/chat",
+          "protocol": "https",
+          "host": [
+            "gemini-chat-a7lr",
+            "onrender",
+            "com"
+          ],
+          "path": [
+            "api",
+            "chat"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Chat-ai Create Session",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://gemini-chat-a7lr.onrender.com/api/chat-ai/session",
+          "protocol": "https",
+          "host": [
+            "gemini-chat-a7lr",
+            "onrender",
+            "com"
+          ],
+          "path": [
+            "api",
+            "chat-ai",
+            "session"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Chat-ai",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"conversationId\": \"254eebdc-5e5c-4a0b-be56-5a9660778a70\",\r\n    \"message\": \"What is my name and what am I learning?\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://gemini-chat-a7lr.onrender.com/api/chat-ai",
+          "protocol": "https",
+          "host": [
+            "gemini-chat-a7lr",
+            "onrender",
+            "com"
+          ],
+          "path": [
+            "api",
+            "chat-ai"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Rag ai ingest",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"text\": \"Spring Boot is a Java framework built on top of Spring that simplifies application development. It eliminates boilerplate code with auto-configuration. Spring Boot comes with an embedded server, making applications production ready out of the box. It supports web apps, REST APIs, microservices, security and seamless cloud deployment. To work effectively with Spring Boot, a solid understanding of core Java and essential Spring concepts is important. Knowledge of build tools such as Maven or Gradle, along with databases and SQL for JPA/Hibernate integration, will also help in building robust applications. Spring Boot makes building RESTful APIs simple and efficient with built-in support for HTTP methods, JSON handling and easy request mapping. It provides tools to quickly develop, validate and manage APIs with minimal boilerplate code. Spring Boot simplifies database integration by providing seamless support for relational and NoSQL databases. With Spring Data JPA, Hibernate and JDBC, it enables efficient CRUD operations, repository management and easy testing using in-memory databases like H2. Spring Boot offers advanced features to handle real-world application needs. From scheduling tasks and sending emails to managing files, caching and transactions, it provides built in support and annotations for efficient development and clean architecture. Spring Boot simplifies building microservices by providing lightweight, independent and easily deployable components. With features like service communication, containerization and cloud deployment, it enables developers to build scalable and production-ready systems efficiently. Apache Kafka is a distributed messaging system used to build real-time data pipelines and streaming applications. In Spring Boot, Kafka allows applications to produce and consume messages efficiently, handle JSON or string data, manage topics and even integrate with tools like ElasticSearch and Grafana for real-time monitoring. Aspect-Oriented Programming (AOP) in Spring Boot allows developers to separate cross-cutting concerns like logging, security or transactions from the main business logic. It complements Object-Oriented Programming (OOP) by modularizing behaviors that affect multiple parts of an application, making code cleaner and more maintainable. Testing is an important part of building reliable Spring Boot applications. It involves unit testing with JUnit, mocking dependencies using Mockito, performing integration tests with MockMVC and automating tests with tools like ZeroCode to ensure your application behaves as expected.\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://gemini-chat-a7lr.onrender.com/api/rag-ai/ingest",
+          "protocol": "https",
+          "host": [
+            "gemini-chat-a7lr",
+            "onrender",
+            "com"
+          ],
+          "path": [
+            "api",
+            "rag-ai",
+            "ingest"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Rag ai ask",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"question\": \"what is python django?\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://gemini-chat-a7lr.onrender.com/api/rag-ai/ask",
+          "protocol": "https",
+          "host": [
+            "gemini-chat-a7lr",
+            "onrender",
+            "com"
+          ],
+          "path": [
+            "api",
+            "rag-ai",
+            "ask"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Create Conversationid session",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://gemini-chat-a7lr.onrender.com/api/agent/session",
+          "protocol": "https",
+          "host": [
+            "gemini-chat-a7lr",
+            "onrender",
+            "com"
+          ],
+          "path": [
+            "api",
+            "agent",
+            "session"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Travel agent",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"conversationId\": \"8213d57b-36dc-4b69-974d-559b5c8fae5d\",\r\n    \"message\": \"Plan a 3-day trip to Kasaragod in September\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://gemini-chat-a7lr.onrender.com/api/agent/chat",
+          "protocol": "https",
+          "host": [
+            "gemini-chat-a7lr",
+            "onrender",
+            "com"
+          ],
+          "path": [
+            "api",
+            "agent",
+            "chat"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Travel agent itinerary",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"destination\": \"Kasaragod\",\r\n  \"days\": \"3\",\r\n  \"month\": \"October\",\r\n  \"fromCity\": \"Mangaluru\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://gemini-chat-a7lr.onrender.com/api/agent/itinerary",
+          "protocol": "https",
+          "host": [
+            "gemini-chat-a7lr",
+            "onrender",
+            "com"
+          ],
+          "path": [
+            "api",
+            "agent",
+            "itinerary"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "DB agent",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"conversationId\": \"6f3cbf01-8be6-4177-8a1c-3b4ab237e240\",\r\n    \"message\": \"Show me the top 3 products by total revenue\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://gemini-chat-a7lr.onrender.com/api/db-agent/chat",
+          "protocol": "https",
+          "host": [
+            "gemini-chat-a7lr",
+            "onrender",
+            "com"
+          ],
+          "path": [
+            "api",
+            "db-agent",
+            "chat"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "DB agent Stream",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"conversationId\": \"b644519d-4f4b-476b-8fab-642730a96f5d\",\r\n    \"message\": \"Show me the top 3 products by total revenue\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://gemini-chat-a7lr.onrender.com/api/db-agent/chat/stream",
+          "protocol": "https",
+          "host": [
+            "gemini-chat-a7lr",
+            "onrender",
+            "com"
+          ],
+          "path": [
+            "api",
+            "db-agent",
+            "chat",
+            "stream"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "MCP DB agent",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"conversationId\": \"6f3cbf01-8be6-4177-8a1c-3b4ab237e240\",\r\n    \"message\": \"Show me the top 3 products by total revenue\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://gemini-chat-a7lr.onrender.com/api/db-agent/chat",
+          "protocol": "https",
+          "host": [
+            "gemini-chat-a7lr",
+            "onrender",
+            "com"
+          ],
+          "path": [
+            "api",
+            "db-agent",
+            "chat"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "MCP DB agent Stream",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"conversationId\": \"b644519d-4f4b-476b-8fab-642730a96f5d\",\r\n    \"message\": \"Show me the top 3 products by total revenue\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://gemini-chat-a7lr.onrender.com/api/mcp-agent/chat/stream",
+          "protocol": "https",
+          "host": [
+            "gemini-chat-a7lr",
+            "onrender",
+            "com"
+          ],
+          "path": [
+            "api",
+            "mcp-agent",
+            "chat",
+            "stream"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}
