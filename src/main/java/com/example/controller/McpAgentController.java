@@ -3,6 +3,7 @@ package com.example.controller;
 import com.example.config.ChatHistoryDialect;
 import com.example.config.InputGuardrailService;
 import com.example.config.InputGuardrailService.GuardrailException;
+import com.example.config.OutputGuardrailService;
 import com.example.config.Prompts;
 import com.example.config.TokenTrackingAdvisor;
 import io.swagger.v3.oas.annotations.Operation;
@@ -46,14 +47,17 @@ public class McpAgentController {
     private final ChatClient chatClient;
     private final TokenTrackingAdvisor tokenTracker;
     private final InputGuardrailService guardrail;
+    private final OutputGuardrailService outputGuardrail;
     private final boolean mcpAvailable;
 
     public McpAgentController(ChatModel chatModel, JdbcTemplate jdbcTemplate,
                                SyncMcpToolCallbackProvider mcpTools,
                                TokenTrackingAdvisor tokenTracker,
-                               InputGuardrailService guardrail) {
+                               InputGuardrailService guardrail,
+                               OutputGuardrailService outputGuardrail) {
         this.tokenTracker = tokenTracker;
         this.guardrail = guardrail;
+        this.outputGuardrail = outputGuardrail;
 
         JdbcChatMemoryRepository memoryRepository = JdbcChatMemoryRepository.builder()
                 .jdbcTemplate(jdbcTemplate)
@@ -125,8 +129,10 @@ public class McpAgentController {
 
             tokenTracker.record(conversationId, chatResponse, System.currentTimeMillis() - start);
 
-            String response = chatResponse.getResult().getOutput().getText();
-            log.info("MCP agent response — session: {}", conversationId);
+            String rawResponse = chatResponse.getResult().getOutput().getText();
+            OutputGuardrailService.GuardrailResult outputResult = outputGuardrail.validate(rawResponse, conversationId);
+            String response = outputResult.content();
+            log.info("MCP agent response — session: {}, output_guardrail: {}", conversationId, outputResult.type());
             return ResponseEntity.ok(Map.of(
                     "conversationId", conversationId,
                     "message", message,
@@ -199,10 +205,12 @@ public class McpAgentController {
 
                 tokenTracker.record(conversationId, chatResponse, System.currentTimeMillis() - start);
 
-                String response = chatResponse.getResult().getOutput().getText();
+                String rawResponse = chatResponse.getResult().getOutput().getText();
+                OutputGuardrailService.GuardrailResult outputResult = outputGuardrail.validate(rawResponse, conversationId);
+                String response = outputResult.content();
+                log.info("MCP agent stream completed — session: {}, output_guardrail: {}", conversationId, outputResult.type());
                 sink.next(ServerSentEvent.<String>builder().event("token").data(response).build());
                 sink.next(ServerSentEvent.<String>builder().data("[DONE]").build());
-                log.info("MCP agent stream completed — session: {}", conversationId);
             } catch (Exception e) {
                 log.error("MCP agent stream error — session: {}, error: {}", conversationId, e.getMessage());
                 sink.next(ServerSentEvent.<String>builder()
