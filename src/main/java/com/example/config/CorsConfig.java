@@ -10,7 +10,10 @@ public class CorsConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
-                .allowedOrigins("http://localhost:5173")
+                .allowedOrigins(
+                        "http://localhost:5173",
+                        "https://gemini-chat-ui.onrender.com"
+                )
                 .allowedMethods("GET", "POST", "PUT", "DELETE")
                 .allowedHeaders("*");
     }
