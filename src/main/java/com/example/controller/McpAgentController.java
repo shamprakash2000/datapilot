@@ -32,8 +32,8 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-@Tag(name = "MCP Agent", description = "Database query agent whose tools run in a separate MCP server (gemini-mcp-server, port 8081). " +
-        "Gemini calls tools via MCP protocol over HTTP/SSE instead of in-memory @Tool methods. " +
+@Tag(name = "MCP Agent", description = "Database query agent whose tools run in a separate MCP server (datapilot-mcp, port 8082). " +
+        "The LLM calls tools via MCP protocol over HTTP/SSE instead of in-memory @Tool methods. " +
         "All endpoints require a conversationId from POST /api/session.")
 @RestController
 @RequestMapping("/api/mcp-agent")
@@ -71,7 +71,7 @@ public class McpAgentController {
 
         this.mcpAvailable = mcpTools.getToolCallbacks().length > 0;
         if (!mcpAvailable) {
-            log.warn("McpAgentController: no MCP tools available — start gemini-mcp-server on port 8082");
+            log.warn("McpAgentController: no MCP tools available — start datapilot-mcp on port 8082");
         }
 
         this.chatClient = ChatClient.builder(chatModel)
@@ -83,7 +83,7 @@ public class McpAgentController {
 
     @Operation(
         summary = "Ask the MCP-backed database agent",
-        description = "Same as /api/db-agent/chat but tools execute in gemini-knowledge-mcp-server (port 8082) via MCP protocol. " +
+        description = "Same as /api/db-agent/chat but tools execute in datapilot-mcp (port 8082) via MCP protocol. " +
                       "Example: {\"conversationId\": \"uuid\", \"message\": \"Which city has the most orders?\"}"
     )
     @PostMapping("/chat")
@@ -93,7 +93,7 @@ public class McpAgentController {
 
         if (!mcpAvailable) {
             return ResponseEntity.status(503).body(Map.of(
-                    "error", "MCP server is not running. Start gemini-knowledge-mcp-server on port 8082 and restart gemini-chat."
+                    "error", "MCP server is not running. Start datapilot-mcp on port 8082 and restart DataPilot."
             ));
         }
         if (conversationId == null || conversationId.isBlank()) {
@@ -148,7 +148,7 @@ public class McpAgentController {
             }
             log.error("MCP agent failed — session: {}, error: {}", conversationId, e.getCause().getMessage());
             return ResponseEntity.internalServerError().body(Map.of(
-                    "error", "The MCP agent encountered an error. Is gemini-knowledge-mcp-server running on port 8082?",
+                    "error", "The MCP agent encountered an error. Is datapilot-mcp running on port 8082?",
                     "conversationId", conversationId
             ));
         }
@@ -167,7 +167,7 @@ public class McpAgentController {
         if (!mcpAvailable) {
             return Flux.just(ServerSentEvent.<String>builder()
                     .event("error")
-                    .data("MCP server is not running. Start gemini-knowledge-mcp-server on port 8082 and restart gemini-chat.")
+                    .data("MCP server is not running. Start datapilot-mcp on port 8082 and restart DataPilot.")
                     .build());
         }
         if (conversationId == null || conversationId.isBlank()) {
@@ -214,7 +214,7 @@ public class McpAgentController {
             } catch (Exception e) {
                 log.error("MCP agent stream error — session: {}, error: {}", conversationId, e.getMessage());
                 sink.next(ServerSentEvent.<String>builder()
-                        .event("error").data("Agent encountered an error. Is gemini-knowledge-mcp-server running on port 8082?").build());
+                        .event("error").data("Agent encountered an error. Is datapilot-mcp running on port 8082?").build());
             } finally {
                 sink.complete();
             }

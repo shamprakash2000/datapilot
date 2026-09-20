@@ -1,4 +1,4 @@
-# gemini-chat — AI Backend Learning Project
+# DataPilot — AI Backend Learning Project
 
 Spring Boot app exploring AI backend development phase by phase — plain HTTP to Spring AI, RAG pipelines, vector search, persistent memory, and cloud deployment.
 
@@ -171,20 +171,20 @@ The tables are pre-loaded with 20 products (8 categories, Indian pricing) and 80
 
 ### MCP Agent — `/api/mcp-agent`
 
-Same database agent as `/api/db-agent` but tools execute in a **separate process** ([gemini-mcp-server](https://github.com/shamprakash2000/gemini-mcp-server)) via the Model Context Protocol. gemini-chat acts as the MCP host — it discovers tools at startup via `tools/list` and Gemini calls them over JSON-RPC 2.0 through an SSE transport.
+Same database agent as `/api/db-agent` but tools execute in a **separate process** ([datapilot-mcp](https://github.com/shamprakash2000/datapilot-mcp)) via the Model Context Protocol. DataPilot acts as the MCP host — it discovers tools at startup via `tools/list` and the LLM calls them over JSON-RPC 2.0 through an SSE transport.
 
-**Requires gemini-mcp-server to be running** (locally on port 8081, or set `MCP_SERVER_URL` env var for the deployed URL). If the MCP server is down, gemini-chat still starts and all other endpoints work — only MCP agent endpoints return 503.
+**Requires datapilot-mcp to be running** (locally on port 8082, or set `KNOWLEDGE_MCP_URL` env var for the deployed URL). If the MCP server is down, DataPilot still starts and all other endpoints work — only MCP agent endpoints return 503.
 
 | Method | URL | Body | Description |
 |---|---|---|---|
-| POST | `/api/mcp-agent/chat` | `{"conversationId": "uuid", "message": "Show top 3 products by revenue"}` | Natural language DB query, tools run in gemini-mcp-server. Timeout: 30s |
+| POST | `/api/mcp-agent/chat` | `{"conversationId": "uuid", "message": "Show top 3 products by revenue"}` | Natural language DB query, tools run in datapilot-mcp. Timeout: 30s |
 | POST | `/api/mcp-agent/chat/stream` | `{"conversationId": "uuid", "message": "..."}` | SSE streaming version. Note: per-tool status events not available (tools run in a different JVM — ThreadLocal can't cross process boundaries) |
 
 **How it differs from `/api/db-agent`:**
 
 | | db-agent | mcp-agent |
 |---|---|---|
-| Tool execution | Same JVM (in-process `@Tool`) | Separate process (gemini-mcp-server via MCP) |
+| Tool execution | Same JVM (in-process `@Tool`) | Separate process (datapilot-mcp via MCP) |
 | Tool discovery | Compile-time | Runtime (`tools/list` at startup) |
 | Protocol | Direct method call | JSON-RPC 2.0 over HTTP/SSE |
 | Live status events | Yes (ThreadLocal) | No (can't cross JVMs) |
@@ -260,10 +260,10 @@ Same database agent as `/api/db-agent` but tools execute in a **separate process
 
 ### Phase 5 — MCP ✅
 - MCP (Model Context Protocol) — Anthropic's standard for connecting AI hosts to external tool servers
-- Split tools out of gemini-chat into a standalone `gemini-mcp-server` (LLM-agnostic, any host can connect)
+- Split tools out of DataPilot into a standalone `datapilot-mcp` (LLM-agnostic, any host can connect)
 - SSE transport — HTTP-based MCP over two channels: client POSTs JSON-RPC messages, server responds on SSE stream
 - `McpAgentController` as MCP host — `SyncMcpToolCallbackProvider` discovers tools at startup via `tools/list`
-- Resilient startup — gemini-chat starts even if MCP server is down; MCP endpoints return 503, all others work
+- Resilient startup — DataPilot starts even if MCP server is down; MCP endpoints return 503, all others work
 - Debug logging shows full JSON-RPC 2.0 message flow between the two JVMs
 - ThreadLocal status events don't cross JVM boundaries — MCP streaming is simplified vs in-process agent
 
