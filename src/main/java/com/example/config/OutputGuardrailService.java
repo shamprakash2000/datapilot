@@ -83,9 +83,11 @@ public class OutputGuardrailService {
     );
 
     // Regex patterns for PII — these REDACT rather than BLOCK.
-    // Credit card: 16 digits in groups of 4 separated by space or dash.
+    // Credit card: 16 digits in groups of 4, separator (space or dash) required between groups.
+    // The separator must be present so that long decimal numbers (e.g. PostgreSQL AVG results)
+    // are not falsely matched as credit card numbers.
     private static final Pattern CREDIT_CARD = Pattern.compile(
-            "\\b(?:\\d{4}[\\s\\-]?){3}\\d{4}\\b"
+            "\\b\\d{4}[\\s\\-]\\d{4}[\\s\\-]\\d{4}[\\s\\-]\\d{4}\\b"
     );
     // SSN: 3-2-4 digit format.
     private static final Pattern SSN = Pattern.compile(

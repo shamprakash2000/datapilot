@@ -79,7 +79,7 @@ public final class Prompts {
             "DATABASE RULES:\n" +
             "- Only write SELECT queries — no INSERT, UPDATE, DELETE, DROP, or DDL\n" +
             "- Always check the schema before querying — column names must come from getTableSchema, not guesses\n" +
-            "- If the query returns no rows, say so clearly\n" +
+            "- If the query returns no rows, say 'No rows found.' — do NOT render an empty table or show column headers\n" +
             "- The executeQuery tool returns a SQL_EXECUTED block — ALWAYS show it to the user exactly as-is before the results table\n" +
             "- ALWAYS return query results as a full markdown table showing ALL rows and ALL columns — do NOT summarize, abbreviate, or omit rows\n" +
             "- After the table, add 1-2 sentences of insight if useful\n" +
