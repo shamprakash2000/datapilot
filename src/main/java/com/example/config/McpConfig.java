@@ -12,6 +12,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -67,11 +71,32 @@ public class McpConfig {
             return new SyncMcpToolCallbackProvider(List.of());
         }
         try {
+            // Step 1: ping /actuator/health with a long timeout to wake Render free-tier service.
+            // Render cold start can take 30-60s — this forces the service awake before we open SSE.
+            String healthUrl = mcpServerUrl.replaceAll("/+$", "") + "/actuator/health";
+            log.info("Pinging datapilot-mcp health endpoint: {}", healthUrl);
+            HttpClient httpClient = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(90))
+                    .build();
+            HttpRequest healthRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(healthUrl))
+                    .timeout(Duration.ofSeconds(90))
+                    .GET()
+                    .build();
+            HttpResponse<String> healthResponse = httpClient.send(healthRequest,
+                    HttpResponse.BodyHandlers.ofString());
+            if (healthResponse.statusCode() != 200) {
+                log.warn("datapilot-mcp health returned {}: {}", healthResponse.statusCode(), healthResponse.body());
+                return new SyncMcpToolCallbackProvider(List.of());
+            }
+            log.info("datapilot-mcp is healthy — establishing MCP SSE connection");
+
+            // Step 2: now the service is awake, open the SSE/MCP connection
             HttpClientSseClientTransport transport = HttpClientSseClientTransport
                     .builder(mcpServerUrl)
                     .build();
             McpSyncClient client = McpClient.sync(transport)
-                    .requestTimeout(Duration.ofSeconds(10))
+                    .requestTimeout(Duration.ofSeconds(60))
                     .build();
             client.initialize();
             log.info("MCP client connected to {}", mcpServerUrl);
