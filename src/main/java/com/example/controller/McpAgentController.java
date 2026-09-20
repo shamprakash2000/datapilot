@@ -3,6 +3,7 @@ package com.example.controller;
 import com.example.config.ChatHistoryDialect;
 import com.example.config.InputGuardrailService;
 import com.example.config.InputGuardrailService.GuardrailException;
+import com.example.config.McpConfig;
 import com.example.config.OutputGuardrailService;
 import com.example.config.Prompts;
 import com.example.config.TokenTrackingAdvisor;
@@ -18,6 +19,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Value;
+
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.ServerSentEvent;
@@ -48,16 +50,18 @@ public class McpAgentController {
     private final TokenTrackingAdvisor tokenTracker;
     private final InputGuardrailService guardrail;
     private final OutputGuardrailService outputGuardrail;
-    private final boolean mcpAvailable;
+    private final McpConfig mcpConfig;
 
     public McpAgentController(ChatModel chatModel, JdbcTemplate jdbcTemplate,
                                SyncMcpToolCallbackProvider mcpTools,
+                               McpConfig mcpConfig,
                                TokenTrackingAdvisor tokenTracker,
                                InputGuardrailService guardrail,
                                OutputGuardrailService outputGuardrail) {
         this.tokenTracker = tokenTracker;
         this.guardrail = guardrail;
         this.outputGuardrail = outputGuardrail;
+        this.mcpConfig = mcpConfig;
 
         JdbcChatMemoryRepository memoryRepository = JdbcChatMemoryRepository.builder()
                 .jdbcTemplate(jdbcTemplate)
@@ -69,15 +73,14 @@ public class McpAgentController {
                 .maxMessages(20)
                 .build();
 
-        this.mcpAvailable = mcpTools.getToolCallbacks().length > 0;
-        if (!mcpAvailable) {
-            log.warn("McpAgentController: no MCP tools available — start datapilot-mcp on port 8082");
+        if (!mcpConfig.isConnected()) {
+            log.warn("McpAgentController: datapilot-mcp not reachable at startup — will retry every 30s");
         }
 
+        // Tools are NOT wired in here — passed per-prompt so reconnects are picked up automatically
         this.chatClient = ChatClient.builder(chatModel)
                 .defaultSystem(Prompts.DATABASE_AGENT_SYSTEM)
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(memory).build())
-                .defaultToolCallbacks(mcpTools)
                 .build();
     }
 
@@ -91,7 +94,7 @@ public class McpAgentController {
         String conversationId = request.get("conversationId");
         String message = request.get("message");
 
-        if (!mcpAvailable) {
+        if (!mcpConfig.isConnected()) {
             return ResponseEntity.status(503).body(Map.of(
                     "error", "MCP server is not running. Start datapilot-mcp on port 8082 and restart DataPilot."
             ));
@@ -122,6 +125,7 @@ public class McpAgentController {
             ChatResponse chatResponse = CompletableFuture.supplyAsync(() ->
                     chatClient.prompt()
                             .user(augmented)
+                            .toolCallbacks(mcpConfig.currentProvider().getToolCallbacks())
                             .advisors(a -> a.param("chat_memory_conversation_id", finalConversationId))
                             .call()
                             .chatResponse()
@@ -164,7 +168,7 @@ public class McpAgentController {
         String conversationId = request.get("conversationId");
         String message = request.get("message");
 
-        if (!mcpAvailable) {
+        if (!mcpConfig.isConnected()) {
             return Flux.just(ServerSentEvent.<String>builder()
                     .event("error")
                     .data("MCP server is not running. Start datapilot-mcp on port 8082 and restart DataPilot.")
@@ -199,6 +203,7 @@ public class McpAgentController {
 
                 ChatResponse chatResponse = chatClient.prompt()
                         .user(augmented)
+                        .toolCallbacks(mcpConfig.currentProvider().getToolCallbacks())
                         .advisors(a -> a.param("chat_memory_conversation_id", conversationId))
                         .call()
                         .chatResponse();
