@@ -2,8 +2,8 @@
 
 Spring Boot app exploring AI backend development phase by phase — plain HTTP to Spring AI, RAG pipelines, vector search, persistent memory, and cloud deployment.
 
-**Live:** https://gemini-chat-a7lr.onrender.com  
-**API Docs (Swagger):** https://gemini-chat-a7lr.onrender.com/swagger-ui.html
+**Live:** https://datapilot-81j0.onrender.com  
+**API Docs (Swagger):** https://datapilot-81j0.onrender.com/swagger-ui.html
 
 ---
 
